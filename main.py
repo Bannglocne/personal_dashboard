@@ -7,6 +7,7 @@ Then open: http://localhost:8000
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles #Sử dụng thư mục tĩnh để chèn CSS + JS
 from pydantic import BaseModel
 from typing import Optional
 import sqlite3
@@ -22,6 +23,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Cho phép FastAPI phục vụ tất cả các file trong thư mục "static"
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 DB_PATH = "dashboard.db"
 

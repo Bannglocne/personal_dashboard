@@ -4,7 +4,7 @@
   --card2:    #0f1829;
   --border:   rgba(0,212,255,0.12);
   --border2:  rgba(0,212,255,0.25);
-  --cyan:     #00d4ff;
+  --cyan:     rgb(203, 60, 255);
   --magenta:  #ff2d87;
   --purple:   #8b5cf6;
   --green:    #00ffb3;
@@ -16,8 +16,7 @@
   --sidebar-w: 220px;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;font-size:14px;overflow:hidden}
-
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Mona Sans',sans-serif;font-size:14px;overflow:hidden}
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -37,12 +36,20 @@ section.page.active{display:block}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── SIDEBAR ── */
-.logo{padding:0 20px 20px;border-bottom:1px solid var(--border)}
-.logo h1{font-family:'Audiowide',cursive;font-size:16px;color:var(--cyan);letter-spacing:.05em;text-shadow:0 0 20px rgba(0,212,255,.4)}
-.logo p{color:var(--muted2);font-size:11px;margin-top:4px}
+.logo{padding:0 20px 20px;border-bottom:1px solid var(--border);display: flex; align-items: center;gap:8px;}
+.logo-icon {width: 30px;  height: 30px;flex-shrink: 0; filter: drop-shadow(0 0 8px rgba(33, 195, 252, 0.5));}
+.logo h1 {
+    font-family: 'Mona Sans',sans-serif;
+    font-size: 18px;
+    color: white;
+    letter-spacing: .05em;
+    text-shadow: 0 0 20px rgba(0, 212, 255, .4);
+    margin: 0; /* Loại bỏ margin mặc định để căn hàng chính xác */
+    line-height: 1; /* Giúp căn giữa chuẩn hơn với icon */
+}
 .nav{padding:16px 0;flex:1}
 .nav-item{
-  display:flex;align-items:center;gap:10px;padding:11px 20px;
+  display:flex;align-items:center;gap:12px;padding:11px 20px;
   cursor:pointer;color:var(--muted2);font-weight:500;font-size:13px;
   border-left:3px solid transparent;transition:all .2s;margin:1px 0;
 }
@@ -50,16 +57,28 @@ section.page.active{display:block}
 .nav-item.active{color:var(--cyan);border-left-color:var(--cyan);background:rgba(0,212,255,.08)}
 .nav-icon{font-size:16px;width:20px;text-align:center}
 .sidebar-time{padding:16px 20px;border-top:1px solid var(--border)}
-.time-display{font-family:'Audiowide',cursive;font-size:18px;color:var(--cyan);text-shadow:0 0 12px rgba(0,212,255,.3)}
+.time-display{font-family:'Mona Sans',sans-serif;font-size:18px;color:var(--cyan);text-shadow:0 0 12px rgba(0,212,255,.3)}
 .date-display{color:var(--muted2);font-size:11px;margin-top:4px}
+/* Fix SVG để không bị đẩy lên/xuống */
+.nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Thêm hiệu ứng mượt mà nếu bạn có làm hover */
+.nav-icon svg {
+    transition: all 0.2s ease;
+}
+
 
 /* ── PAGE HEADER ── */
 .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
-.page-title{font-family:'Audiowide',cursive;font-size:20px;color:var(--text)}
+.page-title{font-family:'Mona Sans',cursive;font-size:20px;color:var(--text);font-weight:700;}
 .page-title span{color:var(--cyan)}
 .btn{
   display:inline-flex;align-items:center;gap:6px;padding:8px 16px;
-  border-radius:8px;border:none;cursor:pointer;font-family:'Exo 2',sans-serif;
+  border-radius:8px;border:none;cursor:pointer;font-family:'Mona Sans',sans-serif;
   font-size:13px;font-weight:600;transition:all .2s;letter-spacing:.02em;
 }
 .btn-primary{background:linear-gradient(135deg,var(--cyan),#0099cc);color:#000}
@@ -122,7 +141,7 @@ section.page.active{display:block}
 .todo-filters{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 .filter-btn{
   padding:6px 14px;border-radius:20px;border:1px solid var(--border);
-  background:transparent;color:var(--muted2);cursor:pointer;font-family:'Exo 2',sans-serif;
+  background:transparent;color:var(--muted2);cursor:pointer;font-family:'Mona Sans',sans-serif;
   font-size:12px;font-weight:600;transition:all .2s;
 }
 .filter-btn.active{background:rgba(0,212,255,.12);border-color:var(--cyan);color:var(--cyan)}
@@ -240,7 +259,7 @@ section.page.active{display:block}
   text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .form-row input,.form-row select,.form-row textarea{
   width:100%;background:var(--card2);border:1px solid var(--border);border-radius:8px;
-  padding:10px 12px;color:var(--text);font-family:'Exo 2',sans-serif;font-size:13px;
+  padding:10px 12px;color:var(--text);font-family:'Mona Sans',sans-serif;font-size:13px;
   outline:none;transition:border-color .2s;
 }
 .form-row input:focus,.form-row select:focus,.form-row textarea:focus{border-color:var(--cyan)}

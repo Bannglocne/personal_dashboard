@@ -5,8 +5,10 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Personal Dashboard</title>
-	<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-	<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+	<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Mona+Sans:ital,wght@0,200..900;1,200..900&display=swap" rel="stylesheet">
 	<link rel="stylesheet" href="/static/style.css">
 	<script src="/static/script.js" defer></script>
 </head>
@@ -17,16 +19,41 @@
 <!-- ═══ SIDEBAR ═══ -->
 <aside id="sidebar">
 	<div class="logo">
-		<h1>⚡ MYDASH</h1>    
-		<p>Personal Command Center</p>
+		<img src="/static/logo.svg" alt="Logo" class="logo-icon">
+		<h1>Dashboard</h1>    
 	</div>
 
 	<nav class="nav">
-		<div class="nav-item active" data-page="dashboard"><span class="nav-icon">🏠</span> Dashboard</div>
-		<div class="nav-item" data-page="habits"><span class="nav-icon">🔥</span> Thói quen</div>
-		<div class="nav-item" data-page="todos"><span class="nav-icon">✅</span> Việc cần làm</div>
-		<div class="nav-item" data-page="projects"><span class="nav-icon">🚀</span> Dự án</div>
-		<div class="nav-item" data-page="finance"><span class="nav-icon">💰</span> Tài chính</div>
+		<div class="nav-item active" data-page="dashboard">
+			<span class="nav-icon">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+			</span> 
+			Dashboard
+		</div>
+		<div class="nav-item" data-page="habits">
+			<span class="nav-icon">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"></path></svg>
+			</span> 
+			Habit Tracker
+		</div>
+		<div class="nav-item" data-page="todos">
+			<span class="nav-icon">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+			</span> 
+			To-do List
+		</div>
+		<div class="nav-item" data-page="projects">
+			<span class="nav-icon">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+			</span> 
+			Project
+		</div>
+		<div class="nav-item" data-page="finance">
+			<span class="nav-icon">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+			</span> 
+			Finance
+		</div>
 	</nav>
 
 	<div class="sidebar-time">
@@ -41,7 +68,7 @@
   <!-- ─── DASHBOARD ─── -->
 	<section class="page active" id="page-dashboard">
 		<div class="page-header">
-			<div class="page-title">Dashboard <span>Overview</span></div>
+			<div class="page-title">Analytics</div>
 		</div>
 
     	<div class="stat-grid" id="dash-stats">

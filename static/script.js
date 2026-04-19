@@ -1,10 +1,11 @@
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 // UTILS
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const fmt = n => new Intl.NumberFormat('vi-VN').format(Math.round(n));
 const fmtDate = s => s ? new Date(s + 'T00:00:00').toLocaleDateString('vi-VN') : '';
 const today = () => new Date().toISOString().slice(0, 10);
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 async function api(path, method = 'GET', body = null) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
@@ -18,25 +19,24 @@ function confirmDel(msg, cb) { if (confirm(msg)) cb(); }
 
 function hexToRgb(hex) {
   hex = hex.replace('#', '');
-  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  if (hex.length === 3) hex = hex.split('').map(c => c+c).join('');
   const n = parseInt(hex, 16);
-  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+  return `${(n>>16)&255},${(n>>8)&255},${n&255}`;
 }
 
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 // CLOCK
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 function updateClock() {
   const now = new Date();
-  $('clock').textContent = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  $('datedisp').textContent = now.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  $('clock').textContent   = now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  $('datedisp').textContent = now.toLocaleDateString('vi-VN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 }
-setInterval(updateClock, 1000);
-updateClock();
+setInterval(updateClock, 1000); updateClock();
 
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 // NAV
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -46,18 +46,17 @@ document.querySelectorAll('.nav-item').forEach(item => {
     loadPage(item.dataset.page);
   });
 });
-
-function loadPage(page) {
-  if (page === 'dashboard') loadDashboard();
-  if (page === 'habits')    loadHabits();
-  if (page === 'todos')     loadTodos();
-  if (page === 'projects')  loadProjects();
-  if (page === 'finance')   loadFinance();
+function loadPage(p) {
+  if (p==='dashboard') loadDashboard();
+  if (p==='habits')    loadHabits();
+  if (p==='todos')     loadTodos();
+  if (p==='projects')  loadProjects();
+  if (p==='finance')   loadFinance();
 }
 
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 // DASHBOARD
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 async function loadDashboard() {
   const d = await api('/api/dashboard');
   $('ds-habits').textContent   = `${d.habits.completed}/${d.habits.total}`;
@@ -65,134 +64,109 @@ async function loadDashboard() {
   $('ds-projects').textContent = d.projects.active;
   $('ds-income').textContent   = fmt(d.finance.income);
   $('ds-expense').textContent  = `chi tiêu: ${fmt(d.finance.expense)}`;
-  const todayStr = today();
+  const td = today();
   const renderList = (items, elId) => {
     const el = $(elId);
     if (!items.length) { el.innerHTML = '<div class="empty"><p>Không có việc nào</p></div>'; return; }
     el.innerHTML = items.map(t => {
-      const due = t.due_date ? `<span class="badge badge-due${t.due_date < todayStr ? ' overdue' : ''}">${fmtDate(t.due_date)}</span>` : '';
-      return `<div class="quick-item"><span class="badge ${priClass(t.priority)}">${t.priority}</span><span style="flex:1;font-weight:500">${t.title}</span>${due}</div>`;
+      const due = t.due_date ? `<span class="badge badge-due${t.due_date<td?' overdue':''}">${fmtDate(t.due_date)}</span>` : '';
+      return `<div class="quick-item"><span class="badge ${priClass(t.priority)}">${t.priority}</span><span style="flex:1;font-weight:500">${esc(t.title)}</span>${due}</div>`;
     }).join('');
   };
   renderList(d.recent_todos, 'dash-todos-list');
-  renderList(d.upcoming, 'dash-upcoming-list');
+  renderList(d.upcoming,     'dash-upcoming-list');
 }
 
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 // HABITS — state
-// ─────────────────────────────────────────────────────
-// Cache 365-day history per habit, reload when we log
-const habitHistoryCache = {};   // id → array
-const habitChartInst    = {};   // id → Chart.js instance
-const habitExpandState  = {};   // id → { chartOpen: bool, logOtherOpen: bool, period: string }
+// ────────────────────────────────────────────────
+const habitHistoryCache = {};
+const habitChartInst    = {};
+const habitExpandState  = {};
 
-function getHabitState(id) {
-  if (!habitExpandState[id]) habitExpandState[id] = { chartOpen: false, logOtherOpen: false, period: 'month' };
+function getHSt(id) {
+  if (!habitExpandState[id]) habitExpandState[id] = { chartOpen:false, logOtherOpen:false, period:'month' };
   return habitExpandState[id];
 }
 
-// ─────────────────────────────────────────────────────
-// HABITS — main load
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
+// HABITS — render list
+// ────────────────────────────────────────────────
 async function loadHabits() {
   const habits = await api('/api/habits');
   const wrap   = $('habit-list-wrap');
   if (!habits.length) {
-    wrap.innerHTML = '<div class="empty"><span class="e-icon">🔥</span><p>Chưa có thói quen nào. Hãy thêm thói quen đầu tiên!</p></div>';
+    wrap.innerHTML = '<div class="empty"><span class="e-icon">🔥</span><p>Chưa có thói quen nào.</p></div>';
     return;
   }
-
-  // Invalidate history cache for all (data may have changed)
-  // BUT keep it for habits whose expand is open so we don't flash
-  wrap.innerHTML = `<div class="habit-list">${habits.map(h => habitCardHTML(h)).join('')}</div>`;
-
-  // Render contribution graphs + restore open chart panels
+  wrap.innerHTML = `<div class="habit-list">${habits.map(habitCardHTML).join('')}</div>`;
   for (const h of habits) {
     await renderContribGraph(h);
-    const state = getHabitState(h.id);
-    if (state.chartOpen && h.type === 'numeric') {
-      _openChartPanel(h.id, h.color, h.daily_goal || 1, h.unit || '', state.period);
-    }
+    const st = getHSt(h.id);
+    if (st.chartOpen && h.type === 'numeric') _openChartPanel(h.id, h.color, h.daily_goal||1, h.unit||'', st.period);
   }
 }
 
-// ─────────────────────────────────────────────────────
-// HABITS — card HTML
-// ─────────────────────────────────────────────────────
 function habitCardHTML(h) {
   const isNum = h.type === 'numeric';
   const rgb   = hexToRgb(h.color || '#6366f1');
   const goal  = h.daily_goal || 1;
   const val   = h.today_value || 0;
-  const pct   = Math.min(100, Math.round(val / goal * 100));
+  const pct   = Math.min(100, Math.round(val/goal*100));
   const done  = h.completed_today;
-  const state = getHabitState(h.id);
+  const st    = getHSt(h.id);
 
-  // ── Left control ──
   const leftCtrl = isNum
     ? `<div class="habit-ring-wrap">
         <svg class="habit-ring" width="38" height="38" viewBox="0 0 38 38">
           <circle class="habit-ring-bg" cx="19" cy="19" r="16"/>
-          <circle class="habit-ring-fg"
-            cx="19" cy="19" r="16"
-            stroke="rgba(${rgb},0.85)"
-            stroke-dasharray="${(2 * Math.PI * 16).toFixed(2)}"
-            stroke-dashoffset="${(2 * Math.PI * 16 * (1 - pct / 100)).toFixed(2)}"/>
+          <circle class="habit-ring-fg" cx="19" cy="19" r="16"
+            stroke="rgba(${rgb},.85)"
+            stroke-dasharray="${(2*Math.PI*16).toFixed(2)}"
+            stroke-dashoffset="${(2*Math.PI*16*(1-pct/100)).toFixed(2)}"/>
         </svg>
         <div class="habit-ring-pct" style="color:rgba(${rgb},1)">${pct}%</div>
       </div>`
-    : `<div class="habit-check${done ? ' done' : ''}" style="--h-color:${h.color}"
-           onclick="logHabit(${h.id})">${done ? '✓' : ''}</div>`;
+    : `<div class="habit-check${done?' done':''}" style="--h-color:${h.color}"
+           onclick="logHabit(${h.id})">${done?'✓':''}</div>`;
 
-  // ── Today numeric log ──
   const logToday = isNum ? `
     <div class="habit-log-today">
-      <input class="habit-num-input" id="num-${h.id}"
-             type="number" min="0" step="any"
-             value="${val > 0 ? val : ''}" placeholder="0"
-             style="--h-color:${h.color}"
+      <input class="habit-num-input" id="num-${h.id}" type="number" min="0" step="any"
+             value="${val>0?val:''}" placeholder="0" style="--h-color:${h.color}"
              onkeydown="if(event.key==='Enter')logNumeric(${h.id},today())">
-      <span class="log-unit-label">${h.unit || ''}</span>
-      <button class="habit-log-btn${done ? ' logged' : ''}" style="${done ? '' : `background:${h.color}`}"
-              onclick="logNumeric(${h.id},today())">
-        ${done ? '✓ Đã ghi' : 'Ghi hôm nay'}
-      </button>
+      <span class="log-unit-label">${esc(h.unit||'')}</span>
+      <button class="habit-log-btn${done?' logged':''}" style="${done?'':'background:'+h.color}"
+              onclick="logNumeric(${h.id},today())">${done?'✓ Đã ghi':'Ghi hôm nay'}</button>
     </div>` : '';
 
-  // ── Progress mini (numeric) ──
   const progressMini = isNum ? `
     <div class="habit-progress-mini">
       <div class="habit-pbar"><div class="habit-pbar-fill" style="width:${pct}%;background:${h.color}"></div></div>
-      <span class="habit-pval">${val}${h.unit ? ' ' + h.unit : ''} / ${goal}${h.unit ? ' ' + h.unit : ''}</span>
+      <span class="habit-pval">${val}${h.unit?' '+esc(h.unit):''} / ${goal}${h.unit?' '+esc(h.unit):''}</span>
     </div>` : '';
 
-  const typeTag = `<span class="habit-type-tag ${isNum ? 'type-numeric' : 'type-boolean'}">${isNum ? '123' : '✓/✗'}</span>`;
+  const typeTag = `<span class="habit-type-tag ${isNum?'type-numeric':'type-boolean'}">${isNum?'123':'✓/✗'}</span>`;
 
-  // ── Log other date panel ──
   const logOtherPanel = `
-    <div class="habit-log-other${state.logOtherOpen ? ' open' : ''}" id="log-other-${h.id}">
+    <div class="habit-log-other${st.logOtherOpen?' open':''}" id="log-other-${h.id}">
       <div class="habit-log-other-inner">
         <label>Ghi ngày:</label>
         <input type="date" class="log-date-input" id="log-date-${h.id}" value="${today()}" max="${today()}">
-        ${isNum ? `
-          <input type="number" class="log-val-input" id="log-val-${h.id}"
-                 min="0" step="any" placeholder="0"
+        ${isNum?`
+          <input type="number" class="log-val-input" id="log-val-${h.id}" min="0" step="any" placeholder="0"
                  onkeydown="if(event.key==='Enter')logOtherDate(${h.id})">
-          <span class="log-unit-label">${h.unit || ''}</span>
-        ` : ''}
-        <button class="btn btn-primary btn-sm" onclick="logOtherDate(${h.id})">
-          ${isNum ? 'Ghi' : 'Bật / Tắt'}
-        </button>
+          <span class="log-unit-label">${esc(h.unit||'')}</span>
+        `:''}
+        <button class="btn btn-primary btn-sm" onclick="logOtherDate(${h.id})">${isNum?'Ghi':'Bật / Tắt'}</button>
       </div>
     </div>`;
 
-  // ── Chart expand (numeric only) ──
   const chartBtn = isNum ? `
-    <button class="habit-expand-btn${state.chartOpen ? ' open' : ''}" id="expand-btn-${h.id}"
-            onclick="toggleChartPanel(${h.id})">
+    <button class="habit-expand-btn${st.chartOpen?' open':''}" id="expand-btn-${h.id}" onclick="toggleChartPanel(${h.id})">
       <span class="chevron">▾</span> Biểu đồ tiến độ
     </button>
-    <div class="habit-detail${state.chartOpen ? ' open' : ''}" id="habit-detail-${h.id}">
+    <div class="habit-detail${st.chartOpen?' open':''}" id="habit-detail-${h.id}">
       <div class="habit-detail-inner" id="habit-detail-inner-${h.id}"></div>
     </div>` : '';
 
@@ -202,221 +176,126 @@ function habitCardHTML(h) {
       ${leftCtrl}
       <div class="habit-info">
         <div class="habit-header-row">
-          <span class="habit-name">${h.icon} ${h.name}</span>
-          ${typeTag}
+          <span class="habit-name">${esc(h.icon)} ${esc(h.name)}</span>${typeTag}
         </div>
-        ${h.description ? `<div class="habit-desc">${h.description}</div>` : ''}
-        ${logToday}
-        ${progressMini}
+        ${h.description?`<div class="habit-desc">${esc(h.description)}</div>`:''}
+        ${logToday}${progressMini}
       </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+      <div class="habit-right">
         <div class="habit-streak">🔥 ${h.streak} ngày</div>
         <div class="habit-actions">
+          <button class="icon-btn edit-btn" onclick="openEditModal('habit',${h.id})">✏️</button>
           <button class="icon-btn" onclick="confirmDel('Xóa thói quen này?',()=>deleteHabit(${h.id}))">🗑</button>
         </div>
       </div>
     </div>
-
-    <!-- Contribution graph — always visible -->
     <div class="habit-contrib-section">
       <div class="habit-contrib-topbar">
         <div class="habit-contrib-stats">
           <span class="contrib-stat-pill">📅 365 ngày qua</span>
-          <span class="contrib-stat-pill" id="contrib-total-${h.id}">
-            Hoàn thành <strong>–</strong> ngày
-          </span>
+          <span class="contrib-stat-pill" id="contrib-total-${h.id}">Hoàn thành <strong>–</strong> ngày</span>
         </div>
-        <button class="log-other-btn${state.logOtherOpen ? ' active' : ''}"
-                id="log-other-btn-${h.id}"
-                onclick="toggleLogOther(${h.id})">
+        <button class="log-other-btn${st.logOtherOpen?' active':''}" id="log-other-btn-${h.id}" onclick="toggleLogOther(${h.id})">
           📅 Ghi ngày khác
         </button>
       </div>
-      <div class="contrib-scroll-wrap">
-        <div id="contrib-svg-${h.id}" class="contrib-svg-inline"></div>
-      </div>
+      <div class="contrib-scroll-wrap"><div id="contrib-svg-${h.id}" class="contrib-svg-inline"></div></div>
       <div class="contrib-legend-row">
         <span>Ít hơn</span>
-        ${[0,1,2,3,4].map(l => `<div class="contrib-swatch" style="background:${contribColor(h.color, l)}"></div>`).join('')}
+        ${[0,1,2,3,4].map(l=>`<div class="contrib-swatch" style="background:${contribColor(h.color,l)}"></div>`).join('')}
         <span>Nhiều hơn</span>
       </div>
     </div>
-
     ${logOtherPanel}
     ${chartBtn}
   </div>`;
 }
 
-// ─────────────────────────────────────────────────────
-// CONTRIBUTION GRAPH — color helpers
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
+// HABITS — contribution graph
+// ────────────────────────────────────────────────
 const MONTHS_VI = ['Th1','Th2','Th3','Th4','Th5','Th6','Th7','Th8','Th9','Th10','Th11','Th12'];
 
 function contribColor(hex, level) {
   if (level === 0) return '#e8eaf0';
-  const opacities = [0, 0.18, 0.40, 0.65, 0.88];
-  const rgb = hexToRgb(hex);
-  return `rgba(${rgb},${opacities[level]})`;
+  return `rgba(${hexToRgb(hex)},${[0,.18,.40,.65,.88][level]})`;
 }
-
-function valueToLevel(type, row, goal) {
+function valueToLevel(htype, row, goal) {
   if (!row || row.value <= 0) return 0;
-  if (type === 'boolean') return row.done ? 4 : 0;
-  const r = row.value / goal;
-  if (r < 0.33) return 1;
-  if (r < 0.66) return 2;
-  if (r <  1.0) return 3;
-  return 4;
+  if (htype === 'boolean') return row.done ? 4 : 0;
+  const r = row.value/goal;
+  return r < .33 ? 1 : r < .66 ? 2 : r < 1 ? 3 : 4;
 }
 
-// ─────────────────────────────────────────────────────
-// CONTRIBUTION GRAPH — build & inject SVG
-// ─────────────────────────────────────────────────────
 async function renderContribGraph(h) {
   const svgEl = $(`contrib-svg-${h.id}`);
   if (!svgEl) return;
-
-  if (!habitHistoryCache[h.id]) {
-    habitHistoryCache[h.id] = await api(`/api/habits/${h.id}/history`);
-  }
+  if (!habitHistoryCache[h.id]) habitHistoryCache[h.id] = await api(`/api/habits/${h.id}/history`);
   const history = habitHistoryCache[h.id];
-  const map     = {};
-  history.forEach(d => { map[d.date] = d; });
-
-  const goal  = h.daily_goal || 1;
-  const htype = h.type || 'boolean';
-
-  // Dimensions — big cells
-  const CELL = 14, GAP = 3, STEP = CELL + GAP;
-  const LEFT_PAD = 26, TOP_PAD = 22;
-
-  // Align start to Monday, covering exactly 52 full weeks + partial leading week
-  const endDate   = new Date();
-  endDate.setHours(0, 0, 0, 0);
-  const startDate = new Date(endDate);
-  startDate.setDate(endDate.getDate() - 364);
-  // Snap back to Monday
-  const dow   = startDate.getDay();  // 0=Sun
-  const toMon = dow === 0 ? -6 : 1 - dow;
-  startDate.setDate(startDate.getDate() + toMon);
-
-  // Count columns
-  const totalDays  = Math.ceil((endDate - startDate) / 864e5) + 1;
-  const totalWeeks = Math.ceil(totalDays / 7);
-
-  const W = LEFT_PAD + totalWeeks * STEP + 4;
-  const H = TOP_PAD  + 7 * STEP + 2;
-
+  const map = {}; history.forEach(d => { map[d.date] = d; });
+  const goal = h.daily_goal||1; const htype = h.type||'boolean';
+  const CELL=14, GAP=3, STEP=CELL+GAP, LEFT_PAD=26, TOP_PAD=22;
+  const endDate = new Date(); endDate.setHours(0,0,0,0);
+  const startDate = new Date(endDate); startDate.setDate(endDate.getDate()-364);
+  const dow = startDate.getDay(); startDate.setDate(startDate.getDate()+(dow===0?-6:1-dow));
+  const totalDays = Math.ceil((endDate-startDate)/864e5)+1;
+  const totalWeeks = Math.ceil(totalDays/7);
+  const W = LEFT_PAD+totalWeeks*STEP+4, H = TOP_PAD+7*STEP+2;
   const todayStr = today();
-  let cells       = '';
-  let monthLabels = '';
-  let lastMonth   = -1;
-  let doneCount   = 0;
-
-  for (let w = 0; w < totalWeeks; w++) {
-    for (let d = 0; d < 7; d++) {
-      const cd = new Date(startDate);
-      cd.setDate(startDate.getDate() + w * 7 + d);
+  let cells='', monthLabels='', lastMonth=-1, doneCount=0;
+  for (let w=0; w<totalWeeks; w++) {
+    for (let d=0; d<7; d++) {
+      const cd = new Date(startDate); cd.setDate(startDate.getDate()+w*7+d);
       if (cd > endDate) continue;
-
-      const ds    = cd.toISOString().slice(0, 10);
-      const entry = map[ds];
-      const level = valueToLevel(htype, entry, goal);
+      const ds = cd.toISOString().slice(0,10);
+      const entry = map[ds]; const level = valueToLevel(htype, entry, goal);
       if (entry?.done) doneCount++;
-
-      const fill   = contribColor(h.color, level);
-      const x      = LEFT_PAD + w * STEP;
-      const y      = TOP_PAD  + d * STEP;
-      const isToday = ds === todayStr;
-
-      const valTip = htype === 'boolean'
-        ? (entry?.done ? 'Hoàn thành ✓' : 'Chưa')
-        : `${entry?.value ?? 0}${h.unit ? ' ' + h.unit : ''}`;
-      const tipStr = `${ds}: ${valTip}`;
-
-      // Click handler — cell click logs that date
-      const onclick = htype === 'boolean'
-        ? `logOtherDateCell(${h.id},'${ds}',null)`
+      const fill = contribColor(h.color, level);
+      const x = LEFT_PAD+w*STEP, y = TOP_PAD+d*STEP;
+      const isToday = ds===todayStr;
+      const tip = htype==='boolean'
+        ? `${ds}: ${entry?.done?'✓ Hoàn thành':'Chưa'}`
+        : `${ds}: ${entry?.value??0}${h.unit?' '+h.unit:''}`;
+      const onclick = htype==='boolean'
+        ? `logOtherDateCell(${h.id},'${ds}')`
         : `prefillLogOther(${h.id},'${ds}')`;
-
-      cells += `<rect class="c-cell${isToday ? ' c-today' : ''}"
-        x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2.5"
-        fill="${fill}"
-        onclick="${onclick}">
-        <title>${tipStr}</title>
-      </rect>`;
-
-      // Month label on first day of each month appearing in row 0 (Monday)
-      if (d === 0 && cd.getDate() <= 7 && cd.getMonth() !== lastMonth) {
-        monthLabels += `<text x="${x}" y="${TOP_PAD - 6}"
-          font-size="10" fill="#9ca3c0" font-family="Mona Sans,sans-serif">
-          ${MONTHS_VI[cd.getMonth()]}
-        </text>`;
+      cells += `<rect class="c-cell${isToday?' c-today':''}" x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2.5" fill="${fill}" onclick="${onclick}"><title>${tip}</title></rect>`;
+      if (d===0 && cd.getDate()<=7 && cd.getMonth()!==lastMonth) {
+        monthLabels += `<text x="${x}" y="${TOP_PAD-6}" font-size="10" fill="#9ca3c0" font-family="Mona Sans,sans-serif">${MONTHS_VI[cd.getMonth()]}</text>`;
         lastMonth = cd.getMonth();
       }
     }
   }
-
-  // Day-of-week labels on left
-  const DOW_LABELS = [{ d: 0, l: 'T2' }, { d: 2, l: 'T4' }, { d: 4, l: 'T6' }];
-  const dowLabels  = DOW_LABELS.map(({ d, l }) =>
-    `<text x="${LEFT_PAD - 4}" y="${TOP_PAD + d * STEP + CELL}"
-      font-size="9" fill="#9ca3c0" font-family="Mona Sans,sans-serif" text-anchor="end">${l}</text>`
+  const dowLabels = [{d:0,l:'T2'},{d:2,l:'T4'},{d:4,l:'T6'}].map(({d,l})=>
+    `<text x="${LEFT_PAD-4}" y="${TOP_PAD+d*STEP+CELL}" font-size="9" fill="#9ca3c0" font-family="Mona Sans,sans-serif" text-anchor="end">${l}</text>`
   ).join('');
-
-  svgEl.innerHTML = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-    ${monthLabels}${dowLabels}${cells}
-  </svg>`;
-
-  // Update stat label
-  const totalEl = $(`contrib-total-${h.id}`);
-  if (totalEl) totalEl.innerHTML = `Hoàn thành <strong>${doneCount}</strong> ngày`;
+  svgEl.innerHTML = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${monthLabels}${dowLabels}${cells}</svg>`;
+  const el = $(`contrib-total-${h.id}`);
+  if (el) el.innerHTML = `Hoàn thành <strong>${doneCount}</strong> ngày`;
 }
 
-// ─────────────────────────────────────────────────────
-// HABITS — log today (boolean toggle)
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
+// HABITS — log actions
+// ────────────────────────────────────────────────
 async function logHabit(id) {
   await api(`/api/habits/${id}/log`, 'POST', { date: today() });
-  invalidateCache(id);
-  await loadHabits();
-  loadDashboard();
+  invalidateCache(id); await loadHabits(); loadDashboard();
 }
-
-// ─────────────────────────────────────────────────────
-// HABITS — log today (numeric)
-// ─────────────────────────────────────────────────────
 async function logNumeric(id, dateStr) {
   const val = parseFloat($(`num-${id}`)?.value);
   if (isNaN(val) || val < 0) return;
   await api(`/api/habits/${id}/log`, 'POST', { value: val, date: dateStr });
-  invalidateCache(id);
-  await loadHabits();
-  loadDashboard();
+  invalidateCache(id); await loadHabits(); loadDashboard();
 }
-
-// ─────────────────────────────────────────────────────
-// HABITS — log other date panel
-// ─────────────────────────────────────────────────────
 function toggleLogOther(id) {
-  const state = getHabitState(id);
-  state.logOtherOpen = !state.logOtherOpen;
-  const panel = $(`log-other-${id}`);
-  const btn   = $(`log-other-btn-${id}`);
-  panel?.classList.toggle('open', state.logOtherOpen);
-  btn?.classList.toggle('active', state.logOtherOpen);
-  if (state.logOtherOpen) $(`log-date-${id}`)?.focus();
+  const st = getHSt(id); st.logOtherOpen = !st.logOtherOpen;
+  $(`log-other-${id}`)?.classList.toggle('open', st.logOtherOpen);
+  $(`log-other-btn-${id}`)?.classList.toggle('active', st.logOtherOpen);
+  if (st.logOtherOpen) $(`log-date-${id}`)?.focus();
 }
-
-// Called when user clicks "Ghi" in the log-other panel
 async function logOtherDate(id) {
-  const dateStr = $(`log-date-${id}`)?.value;
-  if (!dateStr) return;
-
-  // Fetch habit type from current DOM
-  const card = $(`habit-card-${id}`);
-  const isNum = card?.querySelector('.type-numeric') !== null;
-
+  const dateStr = $(`log-date-${id}`)?.value; if (!dateStr) return;
+  const isNum   = $(`habit-card-${id}`)?.querySelector('.type-numeric') !== null;
   if (isNum) {
     const val = parseFloat($(`log-val-${id}`)?.value);
     if (isNaN(val) || val < 0) return;
@@ -424,363 +303,312 @@ async function logOtherDate(id) {
   } else {
     await api(`/api/habits/${id}/log`, 'POST', { date: dateStr });
   }
-  invalidateCache(id);
-  await loadHabits();
-  loadDashboard();
+  invalidateCache(id); await loadHabits(); loadDashboard();
 }
-
-// Called when user clicks directly on a boolean cell in the contribution graph
-async function logOtherDateCell(id, dateStr, _unused) {
+async function logOtherDateCell(id, dateStr) {
   await api(`/api/habits/${id}/log`, 'POST', { date: dateStr });
-  invalidateCache(id);
-  await loadHabits();
-  loadDashboard();
+  invalidateCache(id); await loadHabits(); loadDashboard();
 }
-
-// Called when user clicks a numeric cell — prefills the log panel and opens it
 function prefillLogOther(id, dateStr) {
-  const state = getHabitState(id);
-  if (!state.logOtherOpen) {
-    state.logOtherOpen = true;
-    $(`log-other-${id}`)?.classList.add('open');
-    $(`log-other-btn-${id}`)?.classList.add('active');
-  }
-  const dateInp = $(`log-date-${id}`);
-  if (dateInp) dateInp.value = dateStr;
+  const st = getHSt(id);
+  if (!st.logOtherOpen) { st.logOtherOpen=true; $(`log-other-${id}`)?.classList.add('open'); $(`log-other-btn-${id}`)?.classList.add('active'); }
+  const di = $(`log-date-${id}`); if (di) di.value = dateStr;
   $(`log-val-${id}`)?.focus();
 }
-
-// ─────────────────────────────────────────────────────
-// HABITS — chart panel (numeric)
-// ─────────────────────────────────────────────────────
-async function toggleChartPanel(id) {
-  const state = getHabitState(id);
-  state.chartOpen = !state.chartOpen;
-  const detail = $(`habit-detail-${id}`);
-  const btn    = $(`expand-btn-${id}`);
-  detail?.classList.toggle('open', state.chartOpen);
-  btn?.classList.toggle('open', state.chartOpen);
-
-  if (state.chartOpen) {
-    const list = await api('/api/habits');
-    const h    = list.find(x => x.id === id);
-    if (h) _openChartPanel(id, h.color, h.daily_goal || 1, h.unit || '', state.period);
-  }
-}
-
-async function _openChartPanel(id, color, goal, unit, period) {
-  const inner = $(`habit-detail-inner-${id}`);
-  if (!inner) return;
-  const state = getHabitState(id);
-
-  inner.innerHTML = `
-    <div class="habit-chart-tabs" id="chart-tabs-${id}">
-      <button class="chart-tab${period==='week'?' active':''}"   onclick="changeHabitPeriod(${id},'week')">Tuần</button>
-      <button class="chart-tab${period==='month'?' active':''}"  onclick="changeHabitPeriod(${id},'month')">Tháng</button>
-      <button class="chart-tab${period==='year'?' active':''}"   onclick="changeHabitPeriod(${id},'year')">Năm</button>
-    </div>
-    <div class="habit-chart-canvas-wrap"><canvas id="habit-chart-${id}"></canvas></div>`;
-
-  await renderHabitChart(id, period, color, goal, unit);
-}
-
-async function changeHabitPeriod(id, period) {
-  const state  = getHabitState(id);
-  state.period = period;
-  document.querySelectorAll(`#chart-tabs-${id} .chart-tab`).forEach(b =>
-    b.classList.toggle('active', b.textContent.trim() === { week:'Tuần', month:'Tháng', year:'Năm' }[period])
-  );
-  if (habitChartInst[id]) { habitChartInst[id].destroy(); delete habitChartInst[id]; }
-  const list = await api('/api/habits');
-  const h    = list.find(x => x.id === id);
-  if (h) await renderHabitChart(id, period, h.color, h.daily_goal || 1, h.unit || '');
-}
-
-async function renderHabitChart(id, period, color, goal, unit) {
-  const canvas = $(`habit-chart-${id}`);
-  if (!canvas) return;
-  if (habitChartInst[id]) { habitChartInst[id].destroy(); delete habitChartInst[id]; }
-
-  const data   = await api(`/api/habits/${id}/chart?period=${period}`);
-  const labels = data.map(d => d.label);
-  const values = data.map(d => d.value);
-  const rgb    = hexToRgb(color);
-
-  const ctx  = canvas.getContext('2d');
-  const grad = ctx.createLinearGradient(0, 0, 0, 200);
-  grad.addColorStop(0, `rgba(${rgb},0.20)`);
-  grad.addColorStop(1, `rgba(${rgb},0)`);
-
-  habitChartInst[id] = new Chart(ctx, {
-    type: period === 'year' ? 'bar' : 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: unit || 'Giá trị',
-          data: values,
-          borderColor: color,
-          backgroundColor: period === 'year' ? `rgba(${rgb},0.65)` : grad,
-          fill: period !== 'year',
-          tension: 0.42,
-          pointRadius: period === 'year' ? 0 : 3,
-          pointHoverRadius: 6,
-          pointBackgroundColor: color,
-          borderWidth: 2,
-          borderRadius: period === 'year' ? 6 : 0,
-        },
-        {
-          label: 'Mục tiêu',
-          data: data.map(d => d.goal || goal),
-          borderColor: 'rgba(99,102,241,0.30)',
-          backgroundColor: 'transparent',
-          borderDash: [5, 4],
-          borderWidth: 1.5,
-          pointRadius: 0,
-          type: 'line',
-          tension: 0,
-        }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { labels: { color: '#7b82a8', font: { family: 'Mona Sans', size: 11 }, boxWidth: 12, padding: 12 } },
-        tooltip: {
-          backgroundColor: '#fff', titleColor: '#1e2140', bodyColor: '#4a5071',
-          borderColor: 'rgba(99,102,241,.15)', borderWidth: 1, padding: 10,
-          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}${unit ? ' ' + unit : ''}` }
-        }
-      },
-      scales: {
-        x: { grid: { color: 'rgba(0,0,0,.04)' }, ticks: { color: '#9ca3c0', font: { family: 'Mona Sans', size: 10 }, maxTicksLimit: 12 } },
-        y: { grid: { color: 'rgba(0,0,0,.04)' }, ticks: { color: '#9ca3c0', font: { family: 'Mona Sans', size: 10 } }, beginAtZero: true }
-      }
-    }
-  });
-}
-
-// ─────────────────────────────────────────────────────
-// HABITS — delete
-// ─────────────────────────────────────────────────────
 async function deleteHabit(id) {
   await api(`/api/habits/${id}`, 'DELETE');
-  invalidateCache(id);
-  delete habitExpandState[id];
+  invalidateCache(id); delete habitExpandState[id];
   if (habitChartInst[id]) { habitChartInst[id].destroy(); delete habitChartInst[id]; }
   loadHabits(); loadDashboard();
 }
-
 function invalidateCache(id) { delete habitHistoryCache[id]; }
 
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
+// HABITS — chart panel
+// ────────────────────────────────────────────────
+async function toggleChartPanel(id) {
+  const st = getHSt(id); st.chartOpen = !st.chartOpen;
+  $(`habit-detail-${id}`)?.classList.toggle('open', st.chartOpen);
+  $(`expand-btn-${id}`)?.classList.toggle('open', st.chartOpen);
+  if (st.chartOpen) {
+    const list = await api('/api/habits');
+    const h    = list.find(x=>x.id===id);
+    if (h) _openChartPanel(id, h.color, h.daily_goal||1, h.unit||'', st.period);
+  }
+}
+async function _openChartPanel(id, color, goal, unit, period) {
+  const inner = $(`habit-detail-inner-${id}`); if (!inner) return;
+  inner.innerHTML = `
+    <div class="habit-chart-tabs" id="chart-tabs-${id}">
+      <button class="chart-tab${period==='week'?' active':''}"  onclick="changeHabitPeriod(${id},'week')">Tuần</button>
+      <button class="chart-tab${period==='month'?' active':''}" onclick="changeHabitPeriod(${id},'month')">Tháng</button>
+      <button class="chart-tab${period==='year'?' active':''}"  onclick="changeHabitPeriod(${id},'year')">Năm</button>
+    </div>
+    <div class="habit-chart-canvas-wrap"><canvas id="habit-chart-${id}"></canvas></div>`;
+  await renderHabitChart(id, period, color, goal, unit);
+}
+async function changeHabitPeriod(id, period) {
+  getHSt(id).period = period;
+  document.querySelectorAll(`#chart-tabs-${id} .chart-tab`).forEach(b =>
+    b.classList.toggle('active', b.textContent.trim()==={week:'Tuần',month:'Tháng',year:'Năm'}[period])
+  );
+  if (habitChartInst[id]) { habitChartInst[id].destroy(); delete habitChartInst[id]; }
+  const list = await api('/api/habits'); const h = list.find(x=>x.id===id);
+  if (h) await renderHabitChart(id, period, h.color, h.daily_goal||1, h.unit||'');
+}
+async function renderHabitChart(id, period, color, goal, unit) {
+  const canvas = $(`habit-chart-${id}`); if (!canvas) return;
+  if (habitChartInst[id]) { habitChartInst[id].destroy(); delete habitChartInst[id]; }
+  const data = await api(`/api/habits/${id}/chart?period=${period}`);
+  const rgb  = hexToRgb(color);
+  const ctx  = canvas.getContext('2d');
+  const grad = ctx.createLinearGradient(0,0,0,200);
+  grad.addColorStop(0,`rgba(${rgb},.20)`); grad.addColorStop(1,`rgba(${rgb},0)`);
+  habitChartInst[id] = new Chart(ctx, {
+    type: period==='year'?'bar':'line',
+    data: { labels: data.map(d=>d.label), datasets:[
+      { label: unit||'Giá trị', data:data.map(d=>d.value), borderColor:color,
+        backgroundColor: period==='year'?`rgba(${rgb},.65)`:grad,
+        fill:period!=='year', tension:.42, pointRadius:period==='year'?0:3,
+        pointHoverRadius:6, pointBackgroundColor:color, borderWidth:2, borderRadius:period==='year'?6:0 },
+      { label:'Mục tiêu', data:data.map(d=>d.goal||goal), borderColor:'rgba(99,102,241,.30)',
+        backgroundColor:'transparent', borderDash:[5,4], borderWidth:1.5, pointRadius:0, type:'line', tension:0 }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{ legend:{labels:{color:'#7b82a8',font:{family:'Mona Sans',size:11},boxWidth:12,padding:12}},
+        tooltip:{backgroundColor:'#fff',titleColor:'#1e2140',bodyColor:'#4a5071',borderColor:'rgba(99,102,241,.15)',borderWidth:1,padding:10,
+          callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y}${unit?' '+unit:''}`}} },
+      scales:{ x:{grid:{color:'rgba(0,0,0,.04)'},ticks:{color:'#9ca3c0',font:{family:'Mona Sans',size:10},maxTicksLimit:12}},
+               y:{grid:{color:'rgba(0,0,0,.04)'},ticks:{color:'#9ca3c0',font:{family:'Mona Sans',size:10}},beginAtZero:true} } }
+  });
+}
+
+// ────────────────────────────────────────────────
 // TODOS
-// ─────────────────────────────────────────────────────
-const priClass = p => p === 'high' ? 'pri-high' : p === 'medium' ? 'pri-medium' : 'pri-low';
+// ────────────────────────────────────────────────
+const priClass = p => p==='high'?'pri-high':p==='medium'?'pri-medium':'pri-low';
 let currentFilter = 'all';
 
 async function loadTodos() {
   let todos = await api('/api/todos');
-  if (currentFilter !== 'all') todos = todos.filter(t => t.status === currentFilter);
+  if (currentFilter!=='all') todos = todos.filter(t=>t.status===currentFilter);
   const wrap = $('todo-list-wrap');
-  if (!todos.length) {
-    wrap.innerHTML = '<div class="empty"><span class="e-icon">✅</span><p>Không có việc nào.</p></div>';
-    return;
-  }
+  if (!todos.length) { wrap.innerHTML='<div class="empty"><span class="e-icon">✅</span><p>Không có việc nào.</p></div>'; return; }
   wrap.innerHTML = `<div class="todo-list">${todos.map(todoHTML).join('')}</div>`;
 }
-
 function todoHTML(t) {
-  const done    = t.status === 'done';
-  const todayStr = today();
-  const overdue  = t.due_date && t.due_date < todayStr && !done;
-  const dueLabel = t.due_date ? `<span class="badge badge-due${overdue ? ' overdue' : ''}">${fmtDate(t.due_date)}</span>` : '';
-  const inProg   = t.status === 'in_progress' ? `<span class="badge" style="background:rgba(99,102,241,.08);color:var(--primary);border:1px solid rgba(99,102,241,.2)">In Progress</span>` : '';
-  return `<div class="todo-item${done ? ' done-item' : ''}">
-    <div class="todo-check${done ? ' checked' : ''}" onclick="cycleStatus(${t.id},'${t.status}')">${done ? '✓' : t.status === 'in_progress' ? '…' : ''}</div>
+  const done = t.status==='done'; const td = today();
+  const overdue  = t.due_date && t.due_date<td && !done;
+  const dueLabel = t.due_date?`<span class="badge badge-due${overdue?' overdue':''}">${fmtDate(t.due_date)}</span>`:'';
+  const inProg   = t.status==='in_progress'?`<span class="badge" style="background:rgba(99,102,241,.08);color:var(--primary);border:1px solid rgba(99,102,241,.2)">In Progress</span>`:'';
+  return `<div class="todo-item${done?' done-item':''}">
+    <div class="todo-check${done?' checked':''}" onclick="cycleStatus(${t.id},'${t.status}')">${done?'✓':t.status==='in_progress'?'…':''}</div>
     <div class="todo-body">
-      <div class="todo-title${done ? ' striked' : ''}">${t.title}</div>
-      ${t.description ? `<div style="color:var(--muted2);font-size:12px;margin-top:3px">${t.description}</div>` : ''}
-      <div class="todo-meta"><span class="badge ${priClass(t.priority)}">${t.priority}</span>${t.category ? `<span class="badge badge-cat">${t.category}</span>` : ''}${inProg}${dueLabel}</div>
+      <div class="todo-title${done?' striked':''}">${esc(t.title)}</div>
+      ${t.description?`<div style="color:var(--muted2);font-size:12px;margin-top:3px">${esc(t.description)}</div>`:''}
+      <div class="todo-meta"><span class="badge ${priClass(t.priority)}">${t.priority}</span>${t.category?`<span class="badge badge-cat">${esc(t.category)}</span>`:''}${inProg}${dueLabel}</div>
     </div>
-    <div class="todo-actions"><button class="icon-btn" onclick="confirmDel('Xóa việc này?',()=>deleteTodo(${t.id}))">🗑</button></div>
+    <div class="todo-actions">
+      <button class="icon-btn edit-btn" onclick="openEditModal('todo',${t.id})">✏️</button>
+      <button class="icon-btn" onclick="confirmDel('Xóa việc này?',()=>deleteTodo(${t.id}))">🗑</button>
+    </div>
   </div>`;
 }
-
 async function cycleStatus(id, current) {
-  const next = current === 'pending' ? 'in_progress' : current === 'in_progress' ? 'done' : 'pending';
-  await api(`/api/todos/${id}`, 'PUT', { status: next });
-  loadTodos(); loadDashboard();
+  const next = current==='pending'?'in_progress':current==='in_progress'?'done':'pending';
+  await api(`/api/todos/${id}`,'PUT',{status:next}); loadTodos(); loadDashboard();
 }
-async function deleteTodo(id) { await api(`/api/todos/${id}`, 'DELETE'); loadTodos(); loadDashboard(); }
-
+async function deleteTodo(id) { await api(`/api/todos/${id}`,'DELETE'); loadTodos(); loadDashboard(); }
 document.querySelectorAll('.filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active'); currentFilter = btn.dataset.filter; loadTodos();
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); currentFilter=btn.dataset.filter; loadTodos();
   });
 });
 
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 // PROJECTS
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
+const projectPanelOpen = {};
+
 async function loadProjects() {
   const projects = await api('/api/projects');
   const wrap = $('project-list-wrap');
-  if (!projects.length) {
-    wrap.innerHTML = '<div class="empty"><span class="e-icon">🚀</span><p>Chưa có dự án nào.</p></div>';
-    return;
-  }
+  if (!projects.length) { wrap.innerHTML='<div class="empty"><span class="e-icon">🚀</span><p>Chưa có dự án nào.</p></div>'; return; }
   wrap.innerHTML = projects.map(projectHTML).join('');
 }
-
 function statusLabel(s) {
-  return s==='active'    ? `<span class="project-status status-active">Đang chạy</span>`
-       : s==='completed' ? `<span class="project-status status-completed">Hoàn thành</span>`
-       :                   `<span class="project-status status-paused">Tạm dừng</span>`;
+  return s==='active'?`<span class="project-status status-active">Đang chạy</span>`
+        :s==='completed'?`<span class="project-status status-completed">Hoàn thành</span>`
+        :`<span class="project-status status-paused">Tạm dừng</span>`;
 }
-
 function projectHTML(p) {
-  const doneCount = p.tasks.filter(t => t.completed).length;
-  const tasks = p.tasks.map(t => `
+  const doneCount = p.tasks.filter(t=>t.completed).length;
+  const isOpen    = !!projectPanelOpen[p.id];
+  const tasks = p.tasks.map(t=>`
     <div class="task-item">
       <div class="task-check${t.completed?' done':''}" onclick="toggleTask(${p.id},${t.id})">${t.completed?'✓':''}</div>
-      <span class="task-title${t.completed?' done-text':''}">${t.title}</span>
+      <span class="task-title${t.completed?' done-text':''}" id="task-title-${t.id}">${esc(t.title)}</span>
+      <button class="icon-btn edit-btn" style="width:22px;height:22px;font-size:11px" onclick="inlineEditTask(${t.id},${p.id})">✏️</button>
       <button class="icon-btn" style="width:22px;height:22px;font-size:10px" onclick="deleteTask(${p.id},${t.id})">✕</button>
     </div>`).join('');
   return `<div class="project-card">
     <div class="project-header">
       <div class="project-dot" style="background:${p.color};box-shadow:0 0 6px ${p.color}80"></div>
-      <div class="project-name">${p.name}</div>
+      <div class="project-name">${esc(p.name)}</div>
       ${statusLabel(p.status)}
+      <button class="icon-btn edit-btn" onclick="openEditModal('project',${p.id})">✏️</button>
       <button class="icon-btn" onclick="confirmDel('Xóa dự án?',()=>deleteProject(${p.id}))">🗑</button>
     </div>
-    ${p.description?`<div style="color:var(--muted2);font-size:13px;margin-bottom:10px">${p.description}</div>`:''}
+    ${p.description?`<div style="color:var(--muted2);font-size:13px;margin-bottom:10px">${esc(p.description)}</div>`:''}
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted2);margin-bottom:4px">
       <span>${doneCount}/${p.tasks.length} nhiệm vụ</span><span>${p.progress}%</span>
     </div>
     <div class="progress-bar"><div class="progress-fill" style="width:${p.progress}%"></div></div>
-    <button class="expand-btn" onclick="toggleTaskPanel(${p.id})">▾ Nhiệm vụ (${p.tasks.length})</button>
-    <div class="project-tasks" id="tasks-${p.id}">
+    <button class="expand-btn" id="task-panel-btn-${p.id}" onclick="toggleTaskPanel(${p.id})">
+      ${isOpen?'▴':'▾'} Nhiệm vụ (${p.tasks.length})
+    </button>
+    <div class="project-tasks${isOpen?' open':''}" id="tasks-${p.id}">
       ${tasks}
       <div class="add-task-row">
-        <input id="new-task-${p.id}" style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:7px 11px;color:var(--text);font-family:'Mona Sans',sans-serif;font-size:13px;outline:none" placeholder="Thêm nhiệm vụ...">
+        <input id="new-task-${p.id}"
+          style="flex:1;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:7px 11px;color:var(--text);font-family:'Mona Sans',sans-serif;font-size:13px;outline:none"
+          placeholder="Thêm nhiệm vụ mới..."
+          onkeydown="if(event.key==='Enter')addTask(${p.id})">
         <button class="btn btn-primary btn-sm" onclick="addTask(${p.id})">Thêm</button>
       </div>
     </div>
   </div>`;
 }
-
-function toggleTaskPanel(pid) { $(`tasks-${pid}`)?.classList.toggle('open'); }
-async function toggleTask(pid, tid) { await api(`/api/projects/${pid}/tasks/${tid}`, 'PUT'); loadProjects(); }
-async function deleteTask(pid, tid) { await api(`/api/projects/${pid}/tasks/${tid}`, 'DELETE'); loadProjects(); }
-async function deleteProject(id) { await api(`/api/projects/${id}`, 'DELETE'); loadProjects(); loadDashboard(); }
+function toggleTaskPanel(pid) {
+  projectPanelOpen[pid] = !projectPanelOpen[pid];
+  $(`tasks-${pid}`)?.classList.toggle('open', projectPanelOpen[pid]);
+  const btn = $(`task-panel-btn-${pid}`);
+  if (btn) btn.textContent = (projectPanelOpen[pid]?'▴':'▾') + ` Nhiệm vụ`;
+}
+async function toggleTask(pid,tid)  { await api(`/api/projects/${pid}/tasks/${tid}`,'PUT'); loadProjects(); }
+async function deleteTask(pid,tid)  { await api(`/api/projects/${pid}/tasks/${tid}`,'DELETE'); loadProjects(); }
+async function deleteProject(id)    { await api(`/api/projects/${id}`,'DELETE'); delete projectPanelOpen[id]; loadProjects(); loadDashboard(); }
 async function addTask(pid) {
   const inp = $(`new-task-${pid}`);
   if (!inp?.value.trim()) return;
-  await api(`/api/projects/${pid}/tasks`, 'POST', { title: inp.value.trim() });
-  loadProjects();
+  projectPanelOpen[pid] = true;
+  await api(`/api/projects/${pid}/tasks`,'POST',{title:inp.value.trim()});
+  await loadProjects();
+  $(`new-task-${pid}`)?.focus();
+}
+function inlineEditTask(tid, pid) {
+  const span = $(`task-title-${tid}`); if (!span) return;
+  const old  = span.textContent;
+  span.contentEditable='true';
+  span.style.cssText += ';outline:1.5px solid var(--primary);border-radius:4px;padding:1px 5px';
+  span.focus();
+  const range=document.createRange(); range.selectNodeContents(span);
+  window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+  span.onblur = async () => {
+    span.contentEditable='false'; span.style.outline=''; span.style.padding='';
+    const newTitle = span.textContent.trim();
+    if (newTitle && newTitle!==old) { await api(`/api/project-tasks/${tid}`,'PUT',{title:newTitle}); await loadProjects(); }
+    else span.textContent = old;
+  };
+  span.onkeydown = e => { if(e.key==='Enter'){e.preventDefault();span.blur();} if(e.key==='Escape'){span.textContent=old;span.blur();} };
 }
 
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 // FINANCE
-// ─────────────────────────────────────────────────────
-const ACC_TYPES = { checking: 'Thanh toán', savings: 'Tiết kiệm', investment: 'Đầu tư' };
+// ────────────────────────────────────────────────
+const ACC_TYPES = {checking:'Thanh toán',savings:'Tiết kiệm',investment:'Đầu tư'};
 const TXN_CATS_EXP = ['ăn uống','đi lại','nhà cửa','mua sắm','giải trí','sức khỏe','giáo dục','tiết kiệm','đầu tư','khác'];
 const TXN_CATS_INC = ['lương','thưởng','đầu tư','kinh doanh','khác'];
-let chartFinance = null, chartCats = null;
+let chartFinance=null, chartCats=null;
 
 async function loadFinance() {
-  const [accounts, txns, summary] = await Promise.all([api('/api/accounts'), api('/api/transactions'), api('/api/finance/summary')]);
+  const [accounts,txns,summary] = await Promise.all([api('/api/accounts'),api('/api/transactions'),api('/api/finance/summary')]);
   renderAccounts(accounts); renderTxns(txns); renderFinanceCharts(summary);
 }
-
 function renderAccounts(accounts) {
   const wrap = $('account-grid-wrap');
-  if (!accounts.length) { wrap.innerHTML = '<div style="color:var(--muted2);font-size:13px;padding:10px 0">Chưa có tài khoản nào.</div>'; return; }
-  wrap.innerHTML = accounts.map(a => `
+  if (!accounts.length) { wrap.innerHTML='<div style="color:var(--muted2);font-size:13px;padding:10px 0">Chưa có tài khoản nào.</div>'; return; }
+  wrap.innerHTML = accounts.map(a=>`
     <div class="account-card" style="--accent:${a.color}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div><div class="account-type">${ACC_TYPES[a.type]||a.type}</div><div class="account-name">${a.name}</div></div>
-        <button class="icon-btn" onclick="confirmDel('Xóa tài khoản này?',()=>deleteAccount(${a.id}))">🗑</button>
+        <div><div class="account-type">${ACC_TYPES[a.type]||a.type}</div><div class="account-name">${esc(a.name)}</div></div>
+        <div style="display:flex;gap:4px">
+          <button class="icon-btn edit-btn" onclick="openEditModal('account',${a.id})">✏️</button>
+          <button class="icon-btn" onclick="confirmDel('Xóa tài khoản này?',()=>deleteAccount(${a.id}))">🗑</button>
+        </div>
       </div>
       <div class="account-balance">${fmt(a.balance)}</div>
       <div class="account-currency">${a.currency}</div>
     </div>`).join('');
 }
-
 function renderTxns(txns) {
   const wrap = $('txn-list-wrap');
-  if (!txns.length) { wrap.innerHTML = '<div class="empty"><p>Chưa có giao dịch nào.</p></div>'; return; }
+  if (!txns.length) { wrap.innerHTML='<div class="empty"><p>Chưa có giao dịch nào.</p></div>'; return; }
   wrap.innerHTML = `<div class="txn-list">${txns.slice(0,50).map(t=>`
     <div class="txn-item txn-${t.type}">
       <div class="txn-icon">${t.type==='income'?'📥':'📤'}</div>
-      <div class="txn-info"><div class="txn-desc">${t.description||t.category}</div><div class="txn-meta">${t.category} · ${fmtDate(t.date)}${t.account_name?' · '+t.account_name:''}</div></div>
+      <div class="txn-info">
+        <div class="txn-desc">${esc(t.description||t.category)}</div>
+        <div class="txn-meta">${esc(t.category)} · ${fmtDate(t.date)}${t.account_name?' · '+esc(t.account_name):''}</div>
+      </div>
       <div class="txn-amount">${t.type==='income'?'+':'-'}${fmt(t.amount)}</div>
-      <span class="txn-del" onclick="confirmDel('Xóa giao dịch?',()=>deleteTxn(${t.id}))">✕</span>
+      <span class="txn-edit" onclick="openEditModal('txn',${t.id})">✏️</span>
+      <span class="txn-del"  onclick="confirmDel('Xóa giao dịch?',()=>deleteTxn(${t.id}))">✕</span>
     </div>`).join('')}</div>`;
 }
-
 function renderFinanceCharts(summary) {
-  const labels = summary.monthly.map(m => m.label);
   if (chartFinance) chartFinance.destroy();
-  chartFinance = new Chart($('chart-finance'), {
-    type: 'bar',
-    data: { labels, datasets: [
-      { label: 'Thu nhập', data: summary.monthly.map(m=>m.income),  backgroundColor: 'rgba(16,185,129,.65)', borderRadius: 6 },
-      { label: 'Chi tiêu', data: summary.monthly.map(m=>m.expense), backgroundColor: 'rgba(239,68,68,.55)',  borderRadius: 6 }
+  chartFinance = new Chart($('chart-finance'),{
+    type:'bar', data:{labels:summary.monthly.map(m=>m.label),datasets:[
+      {label:'Thu nhập',data:summary.monthly.map(m=>m.income), backgroundColor:'rgba(16,185,129,.65)',borderRadius:6},
+      {label:'Chi tiêu',data:summary.monthly.map(m=>m.expense),backgroundColor:'rgba(239,68,68,.55)', borderRadius:6}
     ]},
-    options: { responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ labels:{ color:'#7b82a8', font:{ family:'Mona Sans', size:11 } } } },
-      scales:{
-        x:{ grid:{ color:'rgba(0,0,0,.04)' }, ticks:{ color:'#9ca3c0', font:{ family:'Mona Sans', size:10 } } },
-        y:{ grid:{ color:'rgba(0,0,0,.04)' }, ticks:{ color:'#9ca3c0', font:{ family:'Mona Sans', size:10 }, callback: v=>fmt(v) } }
-      }
-    }
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#7b82a8',font:{family:'Mona Sans',size:11}}}},
+      scales:{x:{grid:{color:'rgba(0,0,0,.04)'},ticks:{color:'#9ca3c0',font:{family:'Mona Sans',size:10}}},
+              y:{grid:{color:'rgba(0,0,0,.04)'},ticks:{color:'#9ca3c0',font:{family:'Mona Sans',size:10},callback:v=>fmt(v)}}}}
   });
   if (chartCats) chartCats.destroy();
   const cats = summary.expense_by_cat;
   if (cats.length) {
-    const COLORS = ['#6366f1','#ec4899','#8b5cf6','#10b981','#f59e0b','#f97316','#06b6d4'];
-    chartCats = new Chart($('chart-cats'), {
-      type: 'doughnut',
-      data: { labels: cats.map(c=>c.category), datasets:[{ data: cats.map(c=>c.total), backgroundColor: COLORS.slice(0,cats.length), borderWidth:2, borderColor:'#fff', hoverOffset:8 }] },
-      options: { responsive:true, maintainAspectRatio:false, cutout:'65%',
-        plugins:{ legend:{ position:'right', labels:{ color:'#7b82a8', font:{ family:'Mona Sans', size:11 }, padding:10 } } }
-      }
+    const CLRS=['#6366f1','#ec4899','#8b5cf6','#10b981','#f59e0b','#f97316','#06b6d4'];
+    chartCats = new Chart($('chart-cats'),{
+      type:'doughnut',
+      data:{labels:cats.map(c=>c.category),datasets:[{data:cats.map(c=>c.total),backgroundColor:CLRS.slice(0,cats.length),borderWidth:2,borderColor:'#fff',hoverOffset:8}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'65%',
+        plugins:{legend:{position:'right',labels:{color:'#7b82a8',font:{family:'Mona Sans',size:11},padding:10}}}}
     });
   }
 }
+async function deleteAccount(id) { await api(`/api/accounts/${id}`,'DELETE'); loadFinance(); }
+async function deleteTxn(id)     { await api(`/api/transactions/${id}`,'DELETE'); loadFinance(); loadDashboard(); }
 
-async function deleteAccount(id) { await api(`/api/accounts/${id}`, 'DELETE'); loadFinance(); }
-async function deleteTxn(id) { await api(`/api/transactions/${id}`, 'DELETE'); loadFinance(); loadDashboard(); }
-
-// ─────────────────────────────────────────────────────
-// MODALS
-// ─────────────────────────────────────────────────────
-const COLORS = ['#6366f1','#ec4899','#8b5cf6','#10b981','#f59e0b','#f97316','#06b6d4'];
+// ────────────────────────────────────────────────
+// MODALS — color picker
+// ────────────────────────────────────────────────
+const PALETTE = ['#6366f1','#ec4899','#8b5cf6','#10b981','#f59e0b','#f97316','#06b6d4'];
 let selectedColor = '#6366f1';
 let selectedHabitType = 'boolean';
 
-function colorChips(current = '#6366f1') {
-  return COLORS.map(c => `<div class="color-chip${c===current?' sel':''}" style="background:${c}" onclick="selectColor('${c}')"></div>`).join('');
+function colorChips(current='#6366f1') {
+  return PALETTE.map(c=>`<div class="color-chip${c===current?' sel':''}" style="background:${c}" onclick="selectColor('${c}')"></div>`).join('');
 }
 function selectColor(c) {
   selectedColor = c;
-  document.querySelectorAll('.color-chip').forEach(el =>
-    el.classList.toggle('sel', el.getAttribute('onclick')?.includes(`'${c}'`))
-  );
+  document.querySelectorAll('.color-chip').forEach(el=>el.classList.toggle('sel',el.getAttribute('onclick')?.includes(`'${c}'`)));
 }
 function selectHabitType(type) {
-  selectedHabitType = type;
-  document.querySelectorAll('.type-option').forEach(el => el.classList.toggle('active', el.dataset.type === type));
-  const gr = $('habit-goal-row');
-  if (gr) gr.style.display = type === 'numeric' ? '' : 'none';
+  selectedHabitType=type;
+  document.querySelectorAll('.type-option').forEach(el=>el.classList.toggle('active',el.dataset.type===type));
+  const gr=$('habit-goal-row'); if(gr) gr.style.display=type==='numeric'?'':'none';
 }
 
+// ────────────────────────────────────────────────
+// CREATE MODALS
+// ────────────────────────────────────────────────
 const MODALS = {
-  habit: () => `
+  habit: ()=>`
     <h2>🔥 Thêm thói quen</h2>
     <div class="form-row"><label>Loại thói quen</label>
       <div class="type-toggle">
@@ -788,7 +616,7 @@ const MODALS = {
         <button class="type-option" data-type="numeric" onclick="selectHabitType('numeric')">123 &nbsp; Nhập số liệu</button>
       </div>
     </div>
-    <div class="form-row"><label>Tên thói quen *</label><input id="m-name" placeholder="VD: Dậy sớm, Đọc sách..."></div>
+    <div class="form-row"><label>Tên *</label><input id="m-name" placeholder="VD: Dậy sớm, Đọc sách..."></div>
     <div class="form-row"><label>Mô tả</label><input id="m-desc" placeholder="Tuỳ chọn"></div>
     <div class="form-2col">
       <div class="form-row"><label>Icon</label><input id="m-icon" value="⭐"></div>
@@ -803,10 +631,10 @@ const MODALS = {
     <div class="form-row"><label>Màu sắc</label><div class="color-chips">${colorChips()}</div></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
-      <button class="btn btn-primary" onclick="submitHabit()">Thêm</button>
+      <button class="btn btn-primary" onclick="submitCreateHabit()">Thêm</button>
     </div>`,
 
-  todo: () => `
+  todo: ()=>`
     <h2>✅ Thêm việc cần làm</h2>
     <div class="form-row"><label>Tiêu đề *</label><input id="m-title" placeholder="Cần làm gì?"></div>
     <div class="form-row"><label>Mô tả</label><textarea id="m-tdesc" placeholder="Chi tiết..."></textarea></div>
@@ -819,13 +647,13 @@ const MODALS = {
     <div class="form-row"><label>Hạn chót</label><input type="date" id="m-due"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
-      <button class="btn btn-primary" onclick="submitTodo()">Thêm</button>
+      <button class="btn btn-primary" onclick="submitCreateTodo()">Thêm</button>
     </div>`,
 
-  project: () => `
+  project: ()=>`
     <h2>🚀 Thêm dự án</h2>
-    <div class="form-row"><label>Tên dự án *</label><input id="m-pname" placeholder="Tên dự án"></div>
-    <div class="form-row"><label>Mô tả</label><textarea id="m-pdesc" placeholder="Mục tiêu dự án..."></textarea></div>
+    <div class="form-row"><label>Tên *</label><input id="m-pname" placeholder="Tên dự án"></div>
+    <div class="form-row"><label>Mô tả</label><textarea id="m-pdesc" placeholder="Mục tiêu..."></textarea></div>
     <div class="form-2col">
       <div class="form-row"><label>Ngày bắt đầu</label><input type="date" id="m-pstart"></div>
       <div class="form-row"><label>Deadline</label><input type="date" id="m-pend"></div>
@@ -833,17 +661,17 @@ const MODALS = {
     <div class="form-row"><label>Màu sắc</label><div class="color-chips">${colorChips()}</div></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
-      <button class="btn btn-primary" onclick="submitProject()">Tạo dự án</button>
+      <button class="btn btn-primary" onclick="submitCreateProject()">Tạo</button>
     </div>`,
 
-  account: () => `
+  account: ()=>`
     <h2>💳 Thêm tài khoản</h2>
-    <div class="form-row"><label>Tên tài khoản *</label><input id="m-aname" placeholder="VD: Tài khoản chính..."></div>
+    <div class="form-row"><label>Tên *</label><input id="m-aname" placeholder="VD: Tài khoản chính..."></div>
     <div class="form-2col">
       <div class="form-row"><label>Loại</label>
         <select id="m-atype"><option value="checking">Thanh toán</option><option value="savings">Tiết kiệm</option><option value="investment">Đầu tư</option></select>
       </div>
-      <div class="form-row"><label>Số dư</label><input type="number" id="m-abal" value="0"></div>
+      <div class="form-row"><label>Số dư ban đầu</label><input type="number" id="m-abal" value="0"></div>
     </div>
     <div class="form-2col">
       <div class="form-row"><label>Tiền tệ</label><select id="m-acur"><option value="VND">VND</option><option value="USD">USD</option></select></div>
@@ -851,12 +679,12 @@ const MODALS = {
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
-      <button class="btn btn-primary" onclick="submitAccount()">Thêm</button>
+      <button class="btn btn-primary" onclick="submitCreateAccount()">Thêm</button>
     </div>`,
 
-  txn: async () => {
+  txn: async ()=>{
     const accounts = await api('/api/accounts');
-    const accOpts  = accounts.length ? accounts.map(a=>`<option value="${a.id}">${a.name} (${fmt(a.balance)})</option>`).join('') : '<option value="">-- Không có tài khoản --</option>';
+    const accOpts  = accounts.length?accounts.map(a=>`<option value="${a.id}">${esc(a.name)} (${fmt(a.balance)})</option>`).join(''):'<option value="">-- Không có --</option>';
     return `<h2>💸 Thêm giao dịch</h2>
     <div class="form-2col">
       <div class="form-row"><label>Loại</label>
@@ -872,68 +700,232 @@ const MODALS = {
     <div class="form-row"><label>Ngày</label><input type="date" id="m-tdate" value="${today()}"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
-      <button class="btn btn-primary" onclick="submitTxn()">Thêm</button>
+      <button class="btn btn-primary" onclick="submitCreateTxn()">Thêm</button>
     </div>`;
   }
 };
 
 function updateCatList() {
-  const type = $('m-ttype')?.value;
-  const cats = type==='income' ? TXN_CATS_INC : TXN_CATS_EXP;
-  const sel  = $('m-tcat');
-  if (sel) sel.innerHTML = cats.map(c=>`<option>${c}</option>`).join('');
+  const type=$('m-ttype')?.value; const sel=$('m-tcat'); if(!sel) return;
+  sel.innerHTML=(type==='income'?TXN_CATS_INC:TXN_CATS_EXP).map(c=>`<option>${c}</option>`).join('');
 }
 
 async function openModal(type) {
-  selectedColor = '#6366f1'; selectedHabitType = 'boolean';
-  const modal   = $('modal-content');
-  modal.innerHTML = typeof MODALS[type]==='function' ? await MODALS[type]() : MODALS[type];
+  selectedColor='#6366f1'; selectedHabitType='boolean';
+  $('modal-content').innerHTML = typeof MODALS[type]==='function'?await MODALS[type]():MODALS[type];
   $('overlay').classList.add('show');
 }
-function closeModal() { $('overlay').classList.remove('show'); }
 
-async function submitHabit() {
-  const name = $('m-name')?.value.trim();
-  if (!name) return alert('Vui lòng nhập tên thói quen');
-  const isNum = selectedHabitType === 'numeric';
-  await api('/api/habits', 'POST', {
-    name, description: $('m-desc')?.value||'', color: selectedColor,
-    icon: $('m-icon')?.value||'⭐', type: selectedHabitType,
-    unit: isNum ? ($('m-unit')?.value||'') : '',
-    daily_goal: isNum ? (parseFloat($('m-goal')?.value)||1) : 1,
-  });
+// ────────────────────────────────────────────────
+// EDIT MODALS
+// ────────────────────────────────────────────────
+async function openEditModal(type, id) {
+  selectedColor='#6366f1';
+  const modal=$('modal-content');
+
+  if (type==='habit') {
+    const list=await api('/api/habits'); const h=list.find(x=>x.id===id); if(!h) return;
+    selectedColor=h.color||'#6366f1';
+    const isNum=h.type==='numeric';
+    modal.innerHTML=`
+      <h2>✏️ Chỉnh sửa thói quen</h2>
+      <div class="form-row"><label>Tên *</label><input id="m-name" value="${esc(h.name)}"></div>
+      <div class="form-row"><label>Mô tả</label><input id="m-desc" value="${esc(h.description||'')}"></div>
+      <div class="form-2col">
+        <div class="form-row"><label>Icon</label><input id="m-icon" value="${esc(h.icon||'⭐')}"></div>
+        <div class="form-row"><label>Màu sắc</label><div class="color-chips">${colorChips(h.color)}</div></div>
+      </div>
+      ${isNum?`<div class="form-2col">
+        <div class="form-row"><label>Mục tiêu / ngày</label><input id="m-goal" type="number" min="1" value="${h.daily_goal||1}"></div>
+        <div class="form-row"><label>Đơn vị</label><input id="m-unit" value="${esc(h.unit||'')}"></div>
+      </div>`:''}
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="submitEditHabit(${id},${isNum})">Lưu</button>
+      </div>`;
+
+  } else if (type==='todo') {
+    const list=await api('/api/todos'); const t=list.find(x=>x.id===id); if(!t) return;
+    modal.innerHTML=`
+      <h2>✏️ Chỉnh sửa việc cần làm</h2>
+      <div class="form-row"><label>Tiêu đề *</label><input id="m-title" value="${esc(t.title)}"></div>
+      <div class="form-row"><label>Mô tả</label><textarea id="m-tdesc">${esc(t.description||'')}</textarea></div>
+      <div class="form-2col">
+        <div class="form-row"><label>Độ ưu tiên</label>
+          <select id="m-priority">
+            <option value="low"${t.priority==='low'?' selected':''}>Thấp</option>
+            <option value="medium"${t.priority==='medium'?' selected':''}>Trung bình</option>
+            <option value="high"${t.priority==='high'?' selected':''}>Cao</option>
+          </select>
+        </div>
+        <div class="form-row"><label>Danh mục</label><input id="m-cat" value="${esc(t.category||'')}"></div>
+      </div>
+      <div class="form-2col">
+        <div class="form-row"><label>Hạn chót</label><input type="date" id="m-due" value="${t.due_date||''}"></div>
+        <div class="form-row"><label>Trạng thái</label>
+          <select id="m-status">
+            <option value="pending"${t.status==='pending'?' selected':''}>Chờ xử lý</option>
+            <option value="in_progress"${t.status==='in_progress'?' selected':''}>Đang làm</option>
+            <option value="done"${t.status==='done'?' selected':''}>Xong</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="submitEditTodo(${id})">Lưu</button>
+      </div>`;
+
+  } else if (type==='project') {
+    const list=await api('/api/projects'); const p=list.find(x=>x.id===id); if(!p) return;
+    selectedColor=p.color||'#6366f1';
+    modal.innerHTML=`
+      <h2>✏️ Chỉnh sửa dự án</h2>
+      <div class="form-row"><label>Tên *</label><input id="m-pname" value="${esc(p.name)}"></div>
+      <div class="form-row"><label>Mô tả</label><textarea id="m-pdesc">${esc(p.description||'')}</textarea></div>
+      <div class="form-2col">
+        <div class="form-row"><label>Trạng thái</label>
+          <select id="m-pstatus">
+            <option value="active"${p.status==='active'?' selected':''}>Đang chạy</option>
+            <option value="paused"${p.status==='paused'?' selected':''}>Tạm dừng</option>
+            <option value="completed"${p.status==='completed'?' selected':''}>Hoàn thành</option>
+          </select>
+        </div>
+        <div class="form-row"><label>Màu sắc</label><div class="color-chips">${colorChips(p.color)}</div></div>
+      </div>
+      <div class="form-2col">
+        <div class="form-row"><label>Ngày bắt đầu</label><input type="date" id="m-pstart" value="${p.start_date||''}"></div>
+        <div class="form-row"><label>Deadline</label><input type="date" id="m-pend" value="${p.end_date||''}"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="submitEditProject(${id})">Lưu</button>
+      </div>`;
+
+  } else if (type==='account') {
+    const list=await api('/api/accounts'); const a=list.find(x=>x.id===id); if(!a) return;
+    selectedColor=a.color||'#6366f1';
+    modal.innerHTML=`
+      <h2>✏️ Chỉnh sửa tài khoản</h2>
+      <div class="form-row"><label>Tên *</label><input id="m-aname" value="${esc(a.name)}"></div>
+      <div class="form-2col">
+        <div class="form-row"><label>Loại</label>
+          <select id="m-atype">
+            <option value="checking"${a.type==='checking'?' selected':''}>Thanh toán</option>
+            <option value="savings"${a.type==='savings'?' selected':''}>Tiết kiệm</option>
+            <option value="investment"${a.type==='investment'?' selected':''}>Đầu tư</option>
+          </select>
+        </div>
+        <div class="form-row"><label>Tiền tệ</label>
+          <select id="m-acur">
+            <option value="VND"${a.currency==='VND'?' selected':''}>VND</option>
+            <option value="USD"${a.currency==='USD'?' selected':''}>USD</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row"><label>Màu sắc</label><div class="color-chips">${colorChips(a.color)}</div></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="submitEditAccount(${id})">Lưu</button>
+      </div>`;
+
+  } else if (type==='txn') {
+    const list=await api('/api/transactions'); const t=list.find(x=>x.id===id); if(!t) return;
+    const accounts=await api('/api/accounts');
+    const accOpts=accounts.map(a=>`<option value="${a.id}"${t.account_id===a.id?' selected':''}>${esc(a.name)}</option>`).join('');
+    const cats=t.type==='income'?TXN_CATS_INC:TXN_CATS_EXP;
+    const catOpts=cats.map(c=>`<option${c===t.category?' selected':''}>${c}</option>`).join('');
+    modal.innerHTML=`
+      <h2>✏️ Chỉnh sửa giao dịch</h2>
+      <div class="form-2col">
+        <div class="form-row"><label>Loại</label>
+          <select id="m-ttype"><option value="expense"${t.type==='expense'?' selected':''}>Chi tiêu</option><option value="income"${t.type==='income'?' selected':''}>Thu nhập</option></select>
+        </div>
+        <div class="form-row"><label>Số tiền</label><input type="number" id="m-tamount" value="${t.amount}"></div>
+      </div>
+      <div class="form-2col">
+        <div class="form-row"><label>Danh mục</label><select id="m-tcat">${catOpts}</select></div>
+        <div class="form-row"><label>Tài khoản</label><select id="m-tacc"><option value="">-- Không chọn --</option>${accOpts}</select></div>
+      </div>
+      <div class="form-row"><label>Mô tả</label><input id="m-tdesc2" value="${esc(t.description||'')}"></div>
+      <div class="form-row"><label>Ngày</label><input type="date" id="m-tdate" value="${t.date||today()}"></div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="submitEditTxn(${id})">Lưu</button>
+      </div>`;
+  }
+  $('overlay').classList.add('show');
+}
+
+// ────────────────────────────────────────────────
+// CREATE submit handlers
+// ────────────────────────────────────────────────
+async function submitCreateHabit() {
+  const name=$('m-name')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
+  const isNum=selectedHabitType==='numeric';
+  await api('/api/habits','POST',{name,description:$('m-desc')?.value||'',color:selectedColor,icon:$('m-icon')?.value||'⭐',type:selectedHabitType,unit:isNum?($('m-unit')?.value||''):'',daily_goal:isNum?(parseFloat($('m-goal')?.value)||1):1});
   closeModal(); loadHabits();
 }
-async function submitTodo() {
-  const title = $('m-title')?.value.trim();
-  if (!title) return alert('Vui lòng nhập tiêu đề');
-  await api('/api/todos', 'POST', { title, description: $('m-tdesc')?.value, priority: $('m-priority')?.value, category: $('m-cat')?.value||'general', due_date: $('m-due')?.value||null });
+async function submitCreateTodo() {
+  const title=$('m-title')?.value.trim(); if(!title) return alert('Vui lòng nhập tiêu đề');
+  await api('/api/todos','POST',{title,description:$('m-tdesc')?.value,priority:$('m-priority')?.value,category:$('m-cat')?.value||'general',due_date:$('m-due')?.value||null});
   closeModal(); loadTodos(); loadDashboard();
 }
-async function submitProject() {
-  const name = $('m-pname')?.value.trim();
-  if (!name) return alert('Vui lòng nhập tên dự án');
-  await api('/api/projects', 'POST', { name, description: $('m-pdesc')?.value, color: selectedColor, start_date: $('m-pstart')?.value||null, end_date: $('m-pend')?.value||null });
+async function submitCreateProject() {
+  const name=$('m-pname')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
+  await api('/api/projects','POST',{name,description:$('m-pdesc')?.value,color:selectedColor,start_date:$('m-pstart')?.value||null,end_date:$('m-pend')?.value||null});
   closeModal(); loadProjects(); loadDashboard();
 }
-async function submitAccount() {
-  const name = $('m-aname')?.value.trim();
-  if (!name) return alert('Vui lòng nhập tên tài khoản');
-  await api('/api/accounts', 'POST', { name, type: $('m-atype')?.value, balance: parseFloat($('m-abal')?.value)||0, currency: $('m-acur')?.value, color: selectedColor });
+async function submitCreateAccount() {
+  const name=$('m-aname')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
+  await api('/api/accounts','POST',{name,type:$('m-atype')?.value,balance:parseFloat($('m-abal')?.value)||0,currency:$('m-acur')?.value,color:selectedColor});
   closeModal(); loadFinance();
 }
-async function submitTxn() {
-  const amount = parseFloat($('m-tamount')?.value);
-  if (!amount||amount<=0) return alert('Vui lòng nhập số tiền hợp lệ');
-  const accId = $('m-tacc')?.value;
-  await api('/api/transactions', 'POST', { amount, type: $('m-ttype')?.value, category: $('m-tcat')?.value, description: $('m-tdesc2')?.value, account_id: accId?parseInt(accId):null, date: $('m-tdate')?.value });
+async function submitCreateTxn() {
+  const amount=parseFloat($('m-tamount')?.value); if(!amount||amount<=0) return alert('Vui lòng nhập số tiền hợp lệ');
+  const accId=$('m-tacc')?.value;
+  await api('/api/transactions','POST',{amount,type:$('m-ttype')?.value,category:$('m-tcat')?.value,description:$('m-tdesc2')?.value,account_id:accId?parseInt(accId):null,date:$('m-tdate')?.value});
   closeModal(); loadFinance(); loadDashboard();
 }
 
-$('overlay').addEventListener('click', e => { if (e.target===$('overlay')) closeModal(); });
-document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
+// ────────────────────────────────────────────────
+// EDIT submit handlers
+// ────────────────────────────────────────────────
+async function submitEditHabit(id, isNum) {
+  const name=$('m-name')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
+  const body={name,description:$('m-desc')?.value||'',color:selectedColor,icon:$('m-icon')?.value||'⭐'};
+  if(isNum){body.daily_goal=parseFloat($('m-goal')?.value)||1;body.unit=$('m-unit')?.value||'';}
+  await api(`/api/habits/${id}`,'PUT',body);
+  invalidateCache(id); closeModal(); loadHabits();
+}
+async function submitEditTodo(id) {
+  const title=$('m-title')?.value.trim(); if(!title) return alert('Vui lòng nhập tiêu đề');
+  await api(`/api/todos/${id}`,'PUT',{title,description:$('m-tdesc')?.value,priority:$('m-priority')?.value,category:$('m-cat')?.value||'general',status:$('m-status')?.value,due_date:$('m-due')?.value||null});
+  closeModal(); loadTodos(); loadDashboard();
+}
+async function submitEditProject(id) {
+  const name=$('m-pname')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
+  await api(`/api/projects/${id}`,'PUT',{name,description:$('m-pdesc')?.value,status:$('m-pstatus')?.value,color:selectedColor,start_date:$('m-pstart')?.value||null,end_date:$('m-pend')?.value||null});
+  closeModal(); loadProjects();
+}
+async function submitEditAccount(id) {
+  const name=$('m-aname')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
+  await api(`/api/accounts/${id}`,'PUT',{name,type:$('m-atype')?.value,currency:$('m-acur')?.value,color:selectedColor});
+  closeModal(); loadFinance();
+}
+async function submitEditTxn(id) {
+  const amount=parseFloat($('m-tamount')?.value); if(!amount||amount<=0) return alert('Vui lòng nhập số tiền hợp lệ');
+  const accId=$('m-tacc')?.value;
+  // Delete + recreate keeps account balances consistent
+  await api(`/api/transactions/${id}`,'DELETE');
+  await api('/api/transactions','POST',{amount,type:$('m-ttype')?.value,category:$('m-tcat')?.value,description:$('m-tdesc2')?.value,account_id:accId?parseInt(accId):null,date:$('m-tdate')?.value});
+  closeModal(); loadFinance(); loadDashboard();
+}
 
-// ─────────────────────────────────────────────────────
+function closeModal() { $('overlay').classList.remove('show'); }
+$('overlay').addEventListener('click', e=>{if(e.target===$('overlay'))closeModal();});
+document.addEventListener('keydown', e=>{if(e.key==='Escape')closeModal();});
+
+// ────────────────────────────────────────────────
 // INIT
-// ─────────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 loadDashboard();

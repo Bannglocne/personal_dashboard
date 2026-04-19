@@ -75,7 +75,6 @@ def init_db():
     conn.commit(); conn.close()
 
 def migrate_db():
-    """Safe migration — adds columns without breaking existing data."""
     conn = get_db(); c = conn.cursor()
     for sql in [
         "ALTER TABLE habits ADD COLUMN type TEXT DEFAULT 'boolean'",
@@ -125,13 +124,18 @@ class HabitCreate(BaseModel):
     icon: Optional[str]="⭐"; type: Optional[str]="boolean"
     unit: Optional[str]=""; daily_goal: Optional[float]=1
 
+class HabitUpdate(BaseModel):
+    name: Optional[str]=None; description: Optional[str]=None
+    color: Optional[str]=None; icon: Optional[str]=None
+    unit: Optional[str]=None; daily_goal: Optional[float]=None
+
 class HabitLog(BaseModel):
     value: Optional[float] = None
     date:  Optional[str]   = None
 
-def _habit_completed(h_type, row, goal):
-    if not row: return False
-    return bool(row) if h_type == "boolean" else row["value"] >= goal
+def _done(h_type, row, goal):
+    if not row or row["value"] <= 0: return False
+    return True if h_type == "boolean" else row["value"] >= goal
 
 @app.get("/api/habits")
 def get_habits():
@@ -141,32 +145,27 @@ def get_habits():
     result = []
     for h in habits:
         d = dict(h)
-        goal   = h["daily_goal"] or 1
-        h_type = h["type"] or "boolean"
-        row_t  = c.execute("SELECT value FROM habit_completions WHERE habit_id=? AND completed_date=?",
-                           (h["id"], today.isoformat())).fetchone()
+        goal = h["daily_goal"] or 1; htype = h["type"] or "boolean"
+        row_t = c.execute("SELECT value FROM habit_completions WHERE habit_id=? AND completed_date=?",
+                          (h["id"], today.isoformat())).fetchone()
         d["today_value"]     = row_t["value"] if row_t else 0
-        d["completed_today"] = _habit_completed(h_type, row_t, goal)
-        # Streak
+        d["completed_today"] = _done(htype, row_t, goal)
         streak = 0; check = today
         while True:
-            r  = c.execute("SELECT value FROM habit_completions WHERE habit_id=? AND completed_date=?",
-                           (h["id"], check.isoformat())).fetchone()
-            if _habit_completed(h_type, r, goal): streak += 1; check -= timedelta(days=1)
+            r = c.execute("SELECT value FROM habit_completions WHERE habit_id=? AND completed_date=?",
+                          (h["id"], check.isoformat())).fetchone()
+            if _done(htype, r, goal): streak += 1; check -= timedelta(days=1)
             else: break
         d["streak"] = streak
-        # 28-day history
         hist = []
         for i in range(27, -1, -1):
             day = (today - timedelta(days=i)).isoformat()
             r   = c.execute("SELECT value FROM habit_completions WHERE habit_id=? AND completed_date=?",
                             (h["id"], day)).fetchone()
-            hist.append({"date": day, "value": r["value"] if r else 0,
-                         "done": _habit_completed(h_type, r, goal)})
+            hist.append({"date": day, "value": r["value"] if r else 0, "done": _done(htype, r, goal)})
         d["history"] = hist
         result.append(d)
-    conn.close()
-    return result
+    conn.close(); return result
 
 @app.post("/api/habits")
 def create_habit(h: HabitCreate):
@@ -175,6 +174,15 @@ def create_habit(h: HabitCreate):
               (h.name, h.description, h.color, h.icon, h.type, h.unit, h.daily_goal))
     conn.commit(); new_id = c.lastrowid; conn.close()
     return {"id": new_id, **h.dict(), "completed_today": False, "today_value": 0, "streak": 0, "history": []}
+
+@app.put("/api/habits/{hid}")
+def update_habit(hid: int, h: HabitUpdate):
+    conn = get_db(); c = conn.cursor()
+    fields = {k: v for k, v in h.dict().items() if v is not None}
+    if fields:
+        c.execute(f"UPDATE habits SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?",
+                  (*fields.values(), hid)); conn.commit()
+    conn.close(); return {"ok": True}
 
 @app.delete("/api/habits/{hid}")
 def delete_habit(hid: int):
@@ -189,11 +197,11 @@ def log_habit(hid: int, body: HabitLog):
     habit = c.execute("SELECT * FROM habits WHERE id=?", (hid,)).fetchone()
     if not habit: raise HTTPException(404, "Not found")
     log_date = body.date or date.today().isoformat()
-    h_type   = habit["type"] or "boolean"
+    htype    = habit["type"] or "boolean"
     goal     = habit["daily_goal"] or 1
     existing = c.execute("SELECT id,value FROM habit_completions WHERE habit_id=? AND completed_date=?",
                          (hid, log_date)).fetchone()
-    if h_type == "boolean":
+    if htype == "boolean":
         if existing:
             c.execute("DELETE FROM habit_completions WHERE habit_id=? AND completed_date=?", (hid, log_date))
             conn.commit(); conn.close(); return {"completed": False, "value": 0}
@@ -211,27 +219,23 @@ def log_habit(hid: int, body: HabitLog):
 
 @app.get("/api/habits/{hid}/history")
 def habit_history(hid: int):
-    """Full 365-day history for contribution graph."""
     conn = get_db(); c = conn.cursor()
     habit = c.execute("SELECT * FROM habits WHERE id=?", (hid,)).fetchone()
     if not habit: raise HTTPException(404)
-    goal = habit["daily_goal"] or 1; h_type = habit["type"] or "boolean"
-    today = date.today()
-    result = []
+    goal = habit["daily_goal"] or 1; htype = habit["type"] or "boolean"
+    today = date.today(); result = []
     for i in range(364, -1, -1):
         d = (today - timedelta(days=i)).isoformat()
         r = c.execute("SELECT value FROM habit_completions WHERE habit_id=? AND completed_date=?", (hid, d)).fetchone()
-        val  = r["value"] if r else 0
-        result.append({"date": d, "value": val, "done": _habit_completed(h_type, r, goal)})
+        result.append({"date": d, "value": r["value"] if r else 0, "done": _done(htype, r, goal)})
     conn.close(); return result
 
 @app.get("/api/habits/{hid}/chart")
 def habit_chart(hid: int, period: str = "month"):
-    """Chart data: period = week | month | year"""
     conn = get_db(); c = conn.cursor()
     habit = c.execute("SELECT * FROM habits WHERE id=?", (hid,)).fetchone()
     if not habit: raise HTTPException(404)
-    goal = habit["daily_goal"] or 1; h_type = habit["type"] or "boolean"
+    goal = habit["daily_goal"] or 1; htype = habit["type"] or "boolean"
     today = date.today(); result = []
     if period in ("week", "month"):
         days = 7 if period == "week" else 30
@@ -239,21 +243,20 @@ def habit_chart(hid: int, period: str = "month"):
             d = (today - timedelta(days=i)).isoformat()
             r = c.execute("SELECT value FROM habit_completions WHERE habit_id=? AND completed_date=?", (hid, d)).fetchone()
             val = r["value"] if r else 0
-            result.append({"label": d[5:], "value": val, "done": _habit_completed(h_type, r, goal), "goal": goal})
+            result.append({"label": d[5:], "value": val, "done": _done(htype, r, goal), "goal": goal})
     elif period == "year":
         for i in range(11, -1, -1):
             m = today.month - i; y = today.year
             while m <= 0: m += 12; y -= 1
             ms = f"{y}-{m:02d}"; _, dim = calendar.monthrange(y, m)
-            lbl = f"T{m}/{str(y)[2:]}"
-            if h_type == "boolean":
+            if htype == "boolean":
                 cnt = c.execute("SELECT COUNT(*) FROM habit_completions WHERE habit_id=? AND completed_date LIKE ?",
                                 (hid, f"{ms}%")).fetchone()[0]
-                result.append({"label": lbl, "value": cnt, "goal": dim, "pct": round(cnt/dim*100)})
+                result.append({"label": f"T{m}/{str(y)[2:]}", "value": cnt, "goal": dim})
             else:
                 total = c.execute("SELECT COALESCE(SUM(value),0) FROM habit_completions WHERE habit_id=? AND completed_date LIKE ?",
                                   (hid, f"{ms}%")).fetchone()[0]
-                result.append({"label": lbl, "value": total, "goal": goal * dim})
+                result.append({"label": f"T{m}/{str(y)[2:]}", "value": total, "goal": goal * dim})
     conn.close(); return result
 
 # ── Todos ──────────────────────────────────────────────────────────────────────
@@ -302,6 +305,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     name: Optional[str]=None; description: Optional[str]=None
     status: Optional[str]=None; color: Optional[str]=None
+    start_date: Optional[str]=None; end_date: Optional[str]=None
 
 class TaskCreate(BaseModel):
     title: str
@@ -324,7 +328,7 @@ def get_projects():
 def create_project(p: ProjectCreate):
     conn = get_db(); c = conn.cursor()
     c.execute("INSERT INTO projects (name,description,color,status,start_date,end_date) VALUES (?,?,?,?,?,?)",
-              (p.name,p.description,p.color,p.status,p.start_date,p.end_date))
+              (p.name, p.description, p.color, p.status, p.start_date, p.end_date))
     conn.commit(); new_id = c.lastrowid; conn.close()
     return {"id": new_id, **p.dict(), "tasks": [], "progress": 0}
 
@@ -342,6 +346,12 @@ def delete_project(pid: int):
     conn = get_db()
     conn.execute("DELETE FROM project_tasks WHERE project_id=?", (pid,))
     conn.execute("DELETE FROM projects WHERE id=?", (pid,))
+    conn.commit(); conn.close(); return {"ok": True}
+
+@app.put("/api/project-tasks/{tid}")
+def update_task_title(tid: int, body: TaskCreate):
+    conn = get_db(); c = conn.cursor()
+    c.execute("UPDATE project_tasks SET title=? WHERE id=?", (body.title, tid))
     conn.commit(); conn.close(); return {"ok": True}
 
 @app.post("/api/projects/{pid}/tasks")
@@ -370,6 +380,10 @@ class AccountCreate(BaseModel):
     name: str; type: Optional[str]="checking"; balance: Optional[float]=0
     currency: Optional[str]="VND"; color: Optional[str]="#6366f1"
 
+class AccountUpdate(BaseModel):
+    name: Optional[str]=None; type: Optional[str]=None
+    currency: Optional[str]=None; color: Optional[str]=None
+
 class TxnCreate(BaseModel):
     account_id: Optional[int]=None; amount: float; type: str
     category: Optional[str]="other"; description: Optional[str]=""; date: Optional[str]=None
@@ -383,8 +397,17 @@ def get_accounts():
 def create_account(a: AccountCreate):
     conn = get_db(); c = conn.cursor()
     c.execute("INSERT INTO accounts (name,type,balance,currency,color) VALUES (?,?,?,?,?)",
-              (a.name,a.type,a.balance,a.currency,a.color))
+              (a.name, a.type, a.balance, a.currency, a.color))
     conn.commit(); new_id = c.lastrowid; conn.close(); return {"id": new_id, **a.dict()}
+
+@app.put("/api/accounts/{aid}")
+def update_account(aid: int, a: AccountUpdate):
+    conn = get_db(); c = conn.cursor()
+    fields = {k: v for k, v in a.dict().items() if v is not None}
+    if fields:
+        c.execute(f"UPDATE accounts SET {', '.join(f'{k}=?' for k in fields)} WHERE id=?",
+                  (*fields.values(), aid)); conn.commit()
+    conn.close(); return {"ok": True}
 
 @app.delete("/api/accounts/{aid}")
 def delete_account(aid: int):
@@ -404,7 +427,7 @@ def create_transaction(t: TxnCreate):
     conn = get_db(); c = conn.cursor()
     txn_date = t.date or date.today().isoformat()
     c.execute("INSERT INTO transactions (account_id,amount,type,category,description,date) VALUES (?,?,?,?,?,?)",
-              (t.account_id,t.amount,t.type,t.category,t.description,txn_date))
+              (t.account_id, t.amount, t.type, t.category, t.description, txn_date))
     if t.account_id:
         delta = t.amount if t.type=="income" else -t.amount
         c.execute("UPDATE accounts SET balance=balance+? WHERE id=?", (delta, t.account_id))
@@ -425,13 +448,13 @@ def finance_summary():
     conn = get_db(); c = conn.cursor()
     today = date.today(); monthly = []
     for i in range(5, -1, -1):
-        m = today.month-i; y = today.year
-        while m<=0: m+=12; y-=1
+        m = today.month - i; y = today.year
+        while m <= 0: m += 12; y -= 1
         ms = f"{y}-{m:02d}"
         inc = c.execute("SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='income' AND date LIKE ?", (f"{ms}%",)).fetchone()[0]
         exp = c.execute("SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='expense' AND date LIKE ?", (f"{ms}%",)).fetchone()[0]
         monthly.append({"label": f"T{m}/{str(y)[2:]}", "income": inc, "expense": exp})
-    cm = today.strftime("%Y-%m")
+    cm   = today.strftime("%Y-%m")
     cats = c.execute("SELECT category, COALESCE(SUM(amount),0) as total FROM transactions WHERE type='expense' AND date LIKE ? GROUP BY category ORDER BY total DESC", (f"{cm}%",)).fetchall()
     conn.close(); return {"monthly": monthly, "expense_by_cat": [dict(r) for r in cats]}
 

@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Mona+Sans:ital,wght@0,200..900;1,200..900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Mona+Sans:ital,wght@0,200..900;1,200..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="/static/script.js" defer></script>
@@ -22,53 +22,37 @@
         <rect width="32" height="32" rx="8" fill="url(#lg)"/>
         <path d="M8 20 L14 14 L18 18 L24 12" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
         <circle cx="24" cy="12" r="2" fill="white"/>
-        <defs>
-          <linearGradient id="lg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/>
-          </linearGradient>
-        </defs>
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/>
+        </linearGradient></defs>
       </svg>
       <h1>Dashboard</h1>
     </div>
 
     <nav class="nav">
       <div class="nav-item active" data-page="dashboard">
-        <span class="nav-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-            <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
-          </svg>
-        </span>Dashboard
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></span>
+        Dashboard
       </div>
       <div class="nav-item" data-page="habits">
-        <span class="nav-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/>
-          </svg>
-        </span>Habit Tracker
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/></svg></span>
+        Habit Tracker
       </div>
       <div class="nav-item" data-page="todos">
-        <span class="nav-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-          </svg>
-        </span>To-do List
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+        To-do List
       </div>
       <div class="nav-item" data-page="projects">
-        <span class="nav-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-            <polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
-          </svg>
-        </span>Project
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>
+        Project
+      </div>
+      <div class="nav-item" data-page="goals">
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
+        Mục tiêu
       </div>
       <div class="nav-item" data-page="finance">
-        <span class="nav-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="1" x2="12" y2="23"/>
-            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-          </svg>
-        </span>Finance
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+        Finance
       </div>
     </nav>
 
@@ -84,7 +68,7 @@
     <!-- ─── DASHBOARD ─── -->
     <section class="page active" id="page-dashboard">
       <div class="page-header">
-        <div class="page-title"><span>Analytics</span></div>
+        <div class="page-title">Tổng quan <span>Analytics</span></div>
       </div>
       <div class="stat-grid">
         <div class="stat-card" style="--accent:var(--cyan)">
@@ -106,10 +90,10 @@
           <div class="s-icon">🚀</div>
         </div>
         <div class="stat-card" style="--accent:var(--green)">
-          <div class="s-label">Thu nhập tháng này</div>
-          <div class="s-value" id="ds-income">–</div>
-          <div class="s-sub" id="ds-expense">chi tiêu: –</div>
-          <div class="s-icon">💰</div>
+          <div class="s-label">Mục tiêu đang dành dụm</div>
+          <div class="s-value" id="ds-goals">–</div>
+          <div class="s-sub" id="ds-goals-saved">đã tích lũy: –</div>
+          <div class="s-icon">🎯</div>
         </div>
       </div>
       <div class="grid-2">
@@ -127,21 +111,18 @@
     <!-- ─── HABITS ─── -->
     <section class="page" id="page-habits">
       <div class="page-header">
-        <div class="page-title"><span>Habits Tracker</span></div>
+        <div class="page-title">Thói quen <span>Tracker</span></div>
         <button class="btn btn-primary" onclick="openModal('habit')">＋ Thêm thói quen</button>
       </div>
       <div id="habit-list-wrap">
-        <div class="empty">
-          <span class="e-icon">🔥</span>
-          <p>Chưa có thói quen nào. Hãy thêm thói quen đầu tiên!</p>
-        </div>
+        <div class="empty"><span class="e-icon">🔥</span><p>Chưa có thói quen nào.</p></div>
       </div>
     </section>
 
     <!-- ─── TODOS ─── -->
     <section class="page" id="page-todos">
       <div class="page-header">
-        <div class="page-title"><span>To-Do List</span></div>
+        <div class="page-title">Việc cần làm <span>To-Do</span></div>
         <button class="btn btn-primary" onclick="openModal('todo')">＋ Thêm việc</button>
       </div>
       <div class="todo-filters">
@@ -150,26 +131,36 @@
         <button class="filter-btn" data-filter="in_progress">Đang làm</button>
         <button class="filter-btn" data-filter="done">Xong</button>
       </div>
-      <div id="todo-list-wrap">
-        <div class="empty"><span class="e-icon">✅</span><p>Chưa có việc nào.</p></div>
-      </div>
+      <div id="todo-list-wrap"><div class="empty"><span class="e-icon">✅</span><p>Chưa có việc nào.</p></div></div>
     </section>
 
     <!-- ─── PROJECTS ─── -->
     <section class="page" id="page-projects">
       <div class="page-header">
-        <div class="page-title"><span>Projects</span></div>
+        <div class="page-title">Dự án <span>Projects</span></div>
         <button class="btn btn-primary" onclick="openModal('project')">＋ Thêm dự án</button>
       </div>
-      <div id="project-list-wrap">
-        <div class="empty"><span class="e-icon">🚀</span><p>Chưa có dự án nào.</p></div>
+      <div id="project-list-wrap"><div class="empty"><span class="e-icon">🚀</span><p>Chưa có dự án nào.</p></div></div>
+    </section>
+
+    <!-- ─── GOALS ─── -->
+    <section class="page" id="page-goals">
+      <div class="page-header">
+        <div class="page-title">Mục tiêu <span>Savings</span></div>
+        <button class="btn btn-primary" onclick="openModal('goal')">＋ Thêm mục tiêu</button>
+      </div>
+      <!-- Summary bar -->
+      <div class="goal-summary-bar" id="goal-summary-bar"></div>
+      <!-- Goal cards -->
+      <div id="goal-list-wrap">
+        <div class="empty"><span class="e-icon">🎯</span><p>Chưa có mục tiêu nào. Hãy thêm thứ bạn muốn mua!</p></div>
       </div>
     </section>
 
     <!-- ─── FINANCE ─── -->
     <section class="page" id="page-finance">
       <div class="page-header">
-        <div class="page-title"><span>Finance</span></div>
+        <div class="page-title">Tài chính <span>Finance</span></div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-ghost" onclick="openModal('account')">＋ Tài khoản</button>
           <button class="btn btn-primary" onclick="openModal('txn')">＋ Giao dịch</button>
@@ -177,28 +168,17 @@
       </div>
       <div id="account-grid-wrap" class="account-grid"></div>
       <div class="grid-2" style="margin-bottom:16px">
-        <div class="card">
-          <div class="card-title">📊 Thu chi 6 tháng</div>
-          <div class="chart-wrap-tall"><canvas id="chart-finance"></canvas></div>
-        </div>
-        <div class="card">
-          <div class="card-title">🥧 Chi tiêu theo danh mục</div>
-          <div class="chart-wrap-tall"><canvas id="chart-cats"></canvas></div>
-        </div>
+        <div class="card"><div class="card-title">📊 Thu chi 6 tháng</div><div class="chart-wrap-tall"><canvas id="chart-finance"></canvas></div></div>
+        <div class="card"><div class="card-title">🥧 Chi tiêu theo danh mục</div><div class="chart-wrap-tall"><canvas id="chart-cats"></canvas></div></div>
       </div>
-      <div class="card">
-        <div class="card-title">📃 Giao dịch gần đây</div>
-        <div id="txn-list-wrap"></div>
-      </div>
+      <div class="card"><div class="card-title">📃 Giao dịch gần đây</div><div id="txn-list-wrap"></div></div>
     </section>
 
   </main>
 </div>
 
 <!-- ═══ MODAL ═══ -->
-<div id="overlay">
-  <div class="modal" id="modal-content"></div>
-</div>
+<div id="overlay"><div class="modal" id="modal-content"></div></div>
 
 </body>
 </html>

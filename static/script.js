@@ -51,6 +51,7 @@ function loadPage(p) {
   if (p==='habits')    loadHabits();
   if (p==='todos')     loadTodos();
   if (p==='projects')  loadProjects();
+  if (p==='goals')     loadGoals();
   if (p==='finance')   loadFinance();
 }
 
@@ -62,8 +63,8 @@ async function loadDashboard() {
   $('ds-habits').textContent   = `${d.habits.completed}/${d.habits.total}`;
   $('ds-todos').textContent    = d.todos.pending;
   $('ds-projects').textContent = d.projects.active;
-  $('ds-income').textContent   = fmt(d.finance.income);
-  $('ds-expense').textContent  = `chi tiêu: ${fmt(d.finance.expense)}`;
+  $('ds-goals').textContent    = d.goals?.active ?? '–';
+  $('ds-goals-saved').textContent = `đã tích lũy: ${fmt(d.goals?.total_saved ?? 0)}`;
   const td = today();
   const renderList = (items, elId) => {
     const el = $(elId);
@@ -607,6 +608,218 @@ function selectHabitType(type) {
 // ────────────────────────────────────────────────
 // CREATE MODALS
 // ────────────────────────────────────────────────
+// ────────────────────────────────────────────────
+// SAVINGS GOALS
+// ────────────────────────────────────────────────
+const GOAL_CATS = {
+  'xe':         { label:'Xe cộ',      icon:'🚗', cls:'cat-xe' },
+  'nha':        { label:'Nhà ở',      icon:'🏠', cls:'cat-nha' },
+  'dien-tu':    { label:'Điện tử',    icon:'📱', cls:'cat-dien-tu' },
+  'trang-phuc': { label:'Thời trang', icon:'👗', cls:'cat-trang-phuc' },
+  'du-lich':    { label:'Du lịch',    icon:'✈️', cls:'cat-du-lich' },
+  'giao-duc':   { label:'Giáo dục',   icon:'📚', cls:'cat-giao-duc' },
+  'suc-khoe':   { label:'Sức khoẻ',   icon:'💪', cls:'cat-suc-khoe' },
+  'other':      { label:'Khác',       icon:'🎯', cls:'cat-other' },
+};
+
+const goalHistOpen = {}; // goal id → bool
+
+async function loadGoals() {
+  const goals = await api('/api/goals');
+  const wrap  = $('goal-list-wrap');
+  const bar   = $('goal-summary-bar');
+
+  // Summary bar
+  const totalTarget = goals.reduce((s,g) => s + g.target_amount, 0);
+  const totalSaved  = goals.reduce((s,g) => s + g.saved_amount,  0);
+  const completed   = goals.filter(g => g.saved_amount >= g.target_amount).length;
+  bar.innerHTML = `
+    <div class="goal-summary-card">
+      <div class="goal-summary-icon" style="background:rgba(99,102,241,.1)">🎯</div>
+      <div>
+        <div class="goal-summary-label">Tổng mục tiêu</div>
+        <div class="goal-summary-value">${goals.length}</div>
+      </div>
+    </div>
+    <div class="goal-summary-card">
+      <div class="goal-summary-icon" style="background:rgba(16,185,129,.1)">💰</div>
+      <div>
+        <div class="goal-summary-label">Đã tích lũy</div>
+        <div class="goal-summary-value" style="color:var(--green)">${fmt(totalSaved)}</div>
+      </div>
+    </div>
+    <div class="goal-summary-card">
+      <div class="goal-summary-icon" style="background:rgba(245,158,11,.1)">🏆</div>
+      <div>
+        <div class="goal-summary-label">Còn cần</div>
+        <div class="goal-summary-value" style="color:var(--yellow)">${fmt(Math.max(0, totalTarget - totalSaved))}</div>
+      </div>
+    </div>`;
+
+  if (!goals.length) {
+    wrap.innerHTML = '<div class="empty"><span class="e-icon">🎯</span><p>Chưa có mục tiêu nào. Hãy thêm thứ bạn muốn mua!</p></div>';
+    return;
+  }
+  wrap.innerHTML = `<div class="goal-grid">${goals.map(goalCardHTML).join('')}</div>`;
+}
+
+function goalCardHTML(g) {
+  const cat     = GOAL_CATS[g.category] || GOAL_CATS['other'];
+  const pct     = g.pct || 0;
+  const done    = g.saved_amount >= g.target_amount;
+  const rgb     = hexToRgb(g.color || '#6366f1');
+  const isOpen  = !!goalHistOpen[g.id];
+
+  // Deadline text
+  let deadlineHtml = '';
+  if (g.deadline) {
+    const dl = g.days_left;
+    let cls = 'goal-deadline', txt = '';
+    if (dl < 0)       { cls += ' overdue'; txt = `⚠️ Đã quá hạn ${Math.abs(dl)} ngày`; }
+    else if (dl === 0) { cls += ' near';   txt = '⏰ Hết hạn hôm nay'; }
+    else if (dl <= 30) { cls += ' near';   txt = `⏰ Còn ${dl} ngày`; }
+    else               { txt = `📅 ${fmtDate(g.deadline)}`; }
+    deadlineHtml = `<span class="${cls}">${txt}</span>`;
+  }
+
+  // Deposit history rows
+  const depRows = (g.deposits || []).slice(0, 20).map(d => `
+    <div class="deposit-item">
+      <div>
+        <div class="deposit-amount ${d.amount >= 0 ? 'pos' : 'neg'}">${d.amount >= 0 ? '+' : ''}${fmt(d.amount)}</div>
+        <div class="deposit-meta">${d.note || '—'} · ${fmtDate(d.date)}</div>
+      </div>
+      <span class="deposit-del" onclick="deleteDeposit(${g.id},${d.id})">✕</span>
+    </div>`).join('');
+
+  // Pct badge color
+  const pctColor = done ? 'background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.25)'
+                        : pct >= 50 ? 'background:rgba(245,158,11,.1);color:var(--yellow);border:1px solid rgba(245,158,11,.25)'
+                        : 'background:rgba(99,102,241,.09);color:var(--primary);border:1px solid rgba(99,102,241,.2)';
+
+  return `
+  <div class="goal-card${done?' done':''}" id="goal-card-${g.id}">
+    <div class="goal-banner" style="background:linear-gradient(90deg,${g.color},rgba(${rgb},.45))"></div>
+    <div class="goal-body">
+      <div class="goal-title-row">
+        <div class="goal-icon-wrap" style="background:rgba(${rgb},.12)">
+          ${esc(g.icon || cat.icon)}
+          ${done ? '<div class="goal-done-badge">✓</div>' : ''}
+        </div>
+        <div class="goal-meta">
+          <div class="goal-name">${esc(g.name)}</div>
+          ${g.description ? `<div class="goal-desc">${esc(g.description)}</div>` : ''}
+          <div class="goal-cat-row">
+            <span class="goal-cat-badge ${cat.cls}">${cat.icon} ${cat.label}</span>
+            ${deadlineHtml}
+          </div>
+        </div>
+        <div style="display:flex;gap:5px;flex-shrink:0">
+          <button class="icon-btn edit-btn" onclick="openEditModal('goal',${g.id})">✏️</button>
+          <button class="icon-btn" onclick="confirmDel('Xóa mục tiêu này?',()=>deleteGoal(${g.id}))">🗑</button>
+        </div>
+      </div>
+
+      <div class="goal-amounts">
+        <span class="goal-saved" style="color:${done?'var(--green)':g.color}">${fmt(g.saved_amount)}</span>
+        <span class="goal-target">/ ${fmt(g.target_amount)} ${g.currency || 'VND'}</span>
+        <span class="goal-pct-badge" style="${pctColor}">${pct}%</span>
+      </div>
+
+      <div class="goal-pbar-wrap">
+        <div class="goal-pbar">
+          <div class="goal-pbar-fill" style="width:${pct}%;background:${done?'linear-gradient(90deg,#10b981,#06b6d4)':`linear-gradient(90deg,${g.color},rgba(${rgb},.6))`}"></div>
+        </div>
+        ${!done ? `<div class="goal-remaining">Còn thiếu <strong>${fmt(g.remaining)} ${g.currency||'VND'}</strong></div>` : `<div class="goal-remaining" style="color:var(--green)">🎉 Đã đạt mục tiêu!</div>`}
+      </div>
+    </div>
+
+    <!-- History toggle -->
+    <button class="goal-history-toggle${isOpen?' open':''}" id="goal-hist-btn-${g.id}" onclick="toggleGoalHist(${g.id})">
+      <span>📋 Lịch sử nạp tiền (${(g.deposits||[]).length})</span>
+      <span class="chevron">▾</span>
+    </button>
+    <div class="goal-history${isOpen?' open':''}" id="goal-hist-${g.id}">
+      <div class="goal-history-inner">
+        ${depRows || '<div style="color:var(--muted2);font-size:12px;text-align:center;padding:8px 0">Chưa có lịch sử</div>'}
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="goal-actions">
+      <button class="goal-deposit-btn add" style="background:${g.color}" onclick="openDepositModal(${g.id},'add')">
+        ＋ Nạp tiền
+      </button>
+      <button class="goal-deposit-btn withdraw" onclick="openDepositModal(${g.id},'withdraw')">
+        − Rút
+      </button>
+    </div>
+  </div>`;
+}
+
+function toggleGoalHist(id) {
+  goalHistOpen[id] = !goalHistOpen[id];
+  $(`goal-hist-${id}`)?.classList.toggle('open', goalHistOpen[id]);
+  $(`goal-hist-btn-${id}`)?.classList.toggle('open', goalHistOpen[id]);
+}
+
+async function deleteGoal(id) {
+  await api(`/api/goals/${id}`, 'DELETE');
+  loadGoals(); loadDashboard();
+}
+
+async function deleteDeposit(gid, did) {
+  await api(`/api/goals/${gid}/deposits/${did}`, 'DELETE');
+  goalHistOpen[gid] = true; // keep history open after deleting
+  loadGoals(); loadDashboard();
+}
+
+function openDepositModal(gid, mode) {
+  const modal = $('modal-content');
+  const isAdd = mode === 'add';
+  modal.innerHTML = `
+    <h2>${isAdd ? '💰 Nạp tiền tiết kiệm' : '💸 Rút tiền'}</h2>
+    <div class="form-row">
+      <label>Số tiền *</label>
+      <input type="number" id="dep-amount" min="0" step="1000" placeholder="0" autofocus>
+      <div class="deposit-quick-btns" id="dep-quick-wrap"></div>
+    </div>
+    <div class="form-row"><label>Ghi chú</label><input id="dep-note" placeholder="VD: Lương tháng 4..."></div>
+    <div class="form-row"><label>Ngày</label><input type="date" id="dep-date" value="${today()}"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
+      <button class="btn btn-primary" onclick="submitDeposit(${gid},${isAdd?1:-1})">${isAdd?'Nạp tiền':'Rút tiền'}</button>
+    </div>`;
+  // Quick amount buttons — fetch goal target to suggest amounts
+  api('/api/goals').then(goals => {
+    const g = goals.find(x => x.id === gid);
+    if (!g) return;
+    const remaining = g.remaining || g.target_amount;
+    const suggestions = isAdd
+      ? [100000, 500000, 1000000, Math.round(remaining/4/10000)*10000, Math.round(remaining/2/10000)*10000].filter(v=>v>0)
+      : [100000, 500000, 1000000];
+    const unique = [...new Set(suggestions)].sort((a,b)=>a-b).slice(0,4);
+    const qb = $('dep-quick-wrap');
+    if (qb) qb.innerHTML = unique.map(v=>
+      `<button class="dep-quick" onclick="$('dep-amount').value=${v}">${fmt(v)}</button>`
+    ).join('');
+  });
+  $('overlay').classList.add('show');
+}
+
+async function submitDeposit(gid, sign) {
+  const amount = parseFloat($('dep-amount')?.value);
+  if (!amount || amount <= 0) return alert('Vui lòng nhập số tiền hợp lệ');
+  await api(`/api/goals/${gid}/deposit`, 'POST', {
+    amount: amount * sign,
+    note:   $('dep-note')?.value || '',
+    date:   $('dep-date')?.value || today(),
+  });
+  goalHistOpen[gid] = true;
+  closeModal(); loadGoals(); loadDashboard();
+}
+
+// ────────────────────────────────────────────────────
 const MODALS = {
   habit: ()=>`
     <h2>🔥 Thêm thói quen</h2>
@@ -702,6 +915,33 @@ const MODALS = {
       <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
       <button class="btn btn-primary" onclick="submitCreateTxn()">Thêm</button>
     </div>`;
+  },
+
+  goal: () => {
+    const catOpts = Object.entries(GOAL_CATS).map(([k,v])=>
+      `<option value="${k}">${v.icon} ${v.label}</option>`).join('');
+    return `
+    <h2>🎯 Thêm mục tiêu tiết kiệm</h2>
+    <div class="form-row"><label>Tên mục tiêu *</label><input id="m-gname" placeholder="VD: iPhone 16 Pro, Laptop mới..."></div>
+    <div class="form-row"><label>Mô tả</label><input id="m-gdesc" placeholder="Ghi chú thêm..."></div>
+    <div class="form-2col">
+      <div class="form-row"><label>Danh mục</label><select id="m-gcat">${catOpts}</select></div>
+      <div class="form-row"><label>Icon</label><input id="m-gicon" value="🎯" placeholder="emoji"></div>
+    </div>
+    <div class="form-row"><label>Số tiền cần mua *</label>
+      <input type="number" id="m-gtarget" min="1" step="1000" placeholder="VD: 25000000">
+    </div>
+    <div class="form-2col">
+      <div class="form-row"><label>Số tiền đã có sẵn</label>
+        <input type="number" id="m-gsaved" min="0" step="1000" value="0" placeholder="0">
+      </div>
+      <div class="form-row"><label>Hạn chót</label><input type="date" id="m-gdeadline"></div>
+    </div>
+    <div class="form-row"><label>Màu sắc</label><div class="color-chips">${colorChips()}</div></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
+      <button class="btn btn-primary" onclick="submitCreateGoal()">Tạo mục tiêu</button>
+    </div>`;
   }
 };
 
@@ -712,7 +952,8 @@ function updateCatList() {
 
 async function openModal(type) {
   selectedColor='#6366f1'; selectedHabitType='boolean';
-  $('modal-content').innerHTML = typeof MODALS[type]==='function'?await MODALS[type]():MODALS[type];
+  const content = typeof MODALS[type]==='function' ? await MODALS[type]() : MODALS[type];
+  $('modal-content').innerHTML = content;
   $('overlay').classList.add('show');
 }
 
@@ -852,6 +1093,31 @@ async function openEditModal(type, id) {
         <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
         <button class="btn btn-primary" onclick="submitEditTxn(${id})">Lưu</button>
       </div>`;
+
+  } else if (type==='goal') {
+    const list=await api('/api/goals'); const g=list.find(x=>x.id===id); if(!g) return;
+    selectedColor=g.color||'#6366f1';
+    const catOpts=Object.entries(GOAL_CATS).map(([k,v])=>
+      `<option value="${k}"${g.category===k?' selected':''}>${v.icon} ${v.label}</option>`).join('');
+    modal.innerHTML=`
+      <h2>✏️ Chỉnh sửa mục tiêu</h2>
+      <div class="form-row"><label>Tên *</label><input id="m-gname" value="${esc(g.name)}"></div>
+      <div class="form-row"><label>Mô tả</label><input id="m-gdesc" value="${esc(g.description||'')}"></div>
+      <div class="form-2col">
+        <div class="form-row"><label>Danh mục</label><select id="m-gcat">${catOpts}</select></div>
+        <div class="form-row"><label>Icon</label><input id="m-gicon" value="${esc(g.icon||'🎯')}"></div>
+      </div>
+      <div class="form-row"><label>Số tiền mục tiêu *</label>
+        <input type="number" id="m-gtarget" min="1" step="1000" value="${g.target_amount}">
+      </div>
+      <div class="form-2col">
+        <div class="form-row"><label>Hạn chót</label><input type="date" id="m-gdeadline" value="${g.deadline||''}"></div>
+        <div class="form-row"><label>Màu sắc</label><div class="color-chips">${colorChips(g.color)}</div></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="submitEditGoal(${id})">Lưu</button>
+      </div>`;
   }
   $('overlay').classList.add('show');
 }
@@ -887,6 +1153,25 @@ async function submitCreateTxn() {
   closeModal(); loadFinance(); loadDashboard();
 }
 
+async function submitCreateGoal() {
+  const name   = $('m-gname')?.value.trim();
+  const target = parseFloat($('m-gtarget')?.value);
+  if (!name)             return alert('Vui lòng nhập tên mục tiêu');
+  if (!target || target <= 0) return alert('Vui lòng nhập số tiền hợp lệ');
+  const saved  = parseFloat($('m-gsaved')?.value) || 0;
+  const gid = await api('/api/goals','POST',{
+    name, description:$('m-gdesc')?.value||'',
+    icon:$('m-gicon')?.value||'🎯', color:selectedColor,
+    category:$('m-gcat')?.value||'other', target_amount:target,
+    currency:'VND', deadline:$('m-gdeadline')?.value||null,
+  });
+  // If they already have money saved, create an initial deposit
+  if (saved > 0 && gid?.id) {
+    await api(`/api/goals/${gid.id}/deposit`,'POST',{amount:saved,note:'Số tiền ban đầu',date:today()});
+  }
+  closeModal(); loadGoals(); loadDashboard();
+}
+
 // ────────────────────────────────────────────────
 // EDIT submit handlers
 // ────────────────────────────────────────────────
@@ -919,6 +1204,20 @@ async function submitEditTxn(id) {
   await api(`/api/transactions/${id}`,'DELETE');
   await api('/api/transactions','POST',{amount,type:$('m-ttype')?.value,category:$('m-tcat')?.value,description:$('m-tdesc2')?.value,account_id:accId?parseInt(accId):null,date:$('m-tdate')?.value});
   closeModal(); loadFinance(); loadDashboard();
+}
+
+async function submitEditGoal(id) {
+  const name   = $('m-gname')?.value.trim();
+  const target = parseFloat($('m-gtarget')?.value);
+  if (!name)             return alert('Vui lòng nhập tên mục tiêu');
+  if (!target || target <= 0) return alert('Vui lòng nhập số tiền hợp lệ');
+  await api(`/api/goals/${id}`,'PUT',{
+    name, description:$('m-gdesc')?.value||'',
+    icon:$('m-gicon')?.value||'🎯', color:selectedColor,
+    category:$('m-gcat')?.value||'other', target_amount:target,
+    deadline:$('m-gdeadline')?.value||null,
+  });
+  closeModal(); loadGoals(); loadDashboard();
 }
 
 function closeModal() { $('overlay').classList.remove('show'); }

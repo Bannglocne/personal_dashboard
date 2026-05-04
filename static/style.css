@@ -65,6 +65,7 @@ section.page.active{display:block}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;border:none;cursor:pointer;font-family:'Mona Sans',sans-serif;font-size:13px;font-weight:600;transition:all .18s ease;letter-spacing:-0.01em}
 .btn-primary{background:var(--primary-gd);color:#fff;box-shadow:0 2px 8px rgba(99,102,241,.3)}
 .btn-primary:hover{box-shadow:0 4px 16px rgba(99,102,241,.45);transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.6;cursor:not-allowed;transform:none;box-shadow:none}
 .btn-danger{background:rgba(239,68,68,.08);color:var(--red);border:1px solid rgba(239,68,68,.2)}
 .btn-danger:hover{background:rgba(239,68,68,.15)}
 .btn-ghost{background:var(--card);color:var(--text-sec);border:1px solid var(--border);box-shadow:var(--shadow-sm)}

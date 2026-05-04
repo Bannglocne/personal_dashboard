@@ -10,12 +10,56 @@ const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').re
 async function api(path, method = 'GET', body = null) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(path, opts);
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000); // 8s timeout
+  try {
+    const r = await fetch(path, { ...opts, signal: controller.signal });
+    clearTimeout(timer);
+    if (!r.ok) throw new Error(`Lỗi ${r.status}: ${await r.text()}`);
+    return r.json();
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') throw new Error('Yêu cầu quá lâu, hãy thử lại.');
+    throw e;
+  }
 }
 
-function confirmDel(msg, cb) { if (confirm(msg)) cb(); }
+// Disable a submit button and show loading text; returns restore function
+function setSubmitting(btnEl, loading) {
+  if (!btnEl) return;
+  if (loading) {
+    btnEl.disabled = true;
+    btnEl._origText = btnEl.innerHTML;
+    btnEl.innerHTML = '<span style="opacity:.7">⏳ Đang lưu...</span>';
+  } else {
+    btnEl.disabled = false;
+    if (btnEl._origText) btnEl.innerHTML = btnEl._origText;
+  }
+}
+
+// Find the primary submit button inside the modal
+function modalBtn() {
+  return $('modal-content')?.querySelector('.btn-primary');
+}
+
+// Show inline error inside modal (non-blocking, no alert())
+function modalError(msg) {
+  let el = $('modal-error-msg');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'modal-error-msg';
+    el.style.cssText = 'background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:#ef4444;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;margin-bottom:4px;';
+    $('modal-content')?.querySelector('.modal-footer')?.before(el);
+  }
+  el.textContent = '⚠️ ' + msg;
+  el.style.display = 'block';
+}
+
+function confirmDel(msg, cb) {
+  if (confirm(msg)) {
+    Promise.resolve().then(cb).catch(e => alert('Lỗi khi xóa: ' + e.message));
+  }
+}
 
 function hexToRgb(hex) {
   hex = hex.replace('#', '');
@@ -51,7 +95,6 @@ function loadPage(p) {
   if (p==='habits')    loadHabits();
   if (p==='todos')     loadTodos();
   if (p==='projects')  loadProjects();
-  if (p==='goals')     loadGoals();
   if (p==='finance')   loadFinance();
 }
 
@@ -63,8 +106,8 @@ async function loadDashboard() {
   $('ds-habits').textContent   = `${d.habits.completed}/${d.habits.total}`;
   $('ds-todos').textContent    = d.todos.pending;
   $('ds-projects').textContent = d.projects.active;
-  $('ds-goals').textContent    = d.goals?.active ?? '–';
-  $('ds-goals-saved').textContent = `đã tích lũy: ${fmt(d.goals?.total_saved ?? 0)}`;
+  $('ds-income').textContent   = fmt(d.finance.income);
+  $('ds-expense').textContent  = `chi tiêu: ${fmt(d.finance.expense)}`;
   const td = today();
   const renderList = (items, elId) => {
     const el = $(elId);
@@ -526,6 +569,7 @@ let chartFinance=null, chartCats=null;
 async function loadFinance() {
   const [accounts,txns,summary] = await Promise.all([api('/api/accounts'),api('/api/transactions'),api('/api/finance/summary')]);
   renderAccounts(accounts); renderTxns(txns); renderFinanceCharts(summary);
+  loadGoals();
 }
 function renderAccounts(accounts) {
   const wrap = $('account-grid-wrap');
@@ -765,13 +809,13 @@ function toggleGoalHist(id) {
 
 async function deleteGoal(id) {
   await api(`/api/goals/${id}`, 'DELETE');
-  loadGoals(); loadDashboard();
+  loadFinance();
 }
 
 async function deleteDeposit(gid, did) {
   await api(`/api/goals/${gid}/deposits/${did}`, 'DELETE');
   goalHistOpen[gid] = true; // keep history open after deleting
-  loadGoals(); loadDashboard();
+  loadFinance();
 }
 
 function openDepositModal(gid, mode) {
@@ -809,14 +853,17 @@ function openDepositModal(gid, mode) {
 
 async function submitDeposit(gid, sign) {
   const amount = parseFloat($('dep-amount')?.value);
-  if (!amount || amount <= 0) return alert('Vui lòng nhập số tiền hợp lệ');
-  await api(`/api/goals/${gid}/deposit`, 'POST', {
-    amount: amount * sign,
-    note:   $('dep-note')?.value || '',
-    date:   $('dep-date')?.value || today(),
-  });
-  goalHistOpen[gid] = true;
-  closeModal(); loadGoals(); loadDashboard();
+  if (!amount || amount <= 0) { modalError('Vui lòng nhập số tiền hợp lệ'); return; }
+  const btn = modalBtn(); setSubmitting(btn, true);
+  try {
+    await api(`/api/goals/${gid}/deposit`, 'POST', {
+      amount: amount * sign,
+      note:   $('dep-note')?.value || '',
+      date:   $('dep-date')?.value || today(),
+    });
+    goalHistOpen[gid] = true;
+    closeModal(); loadFinance();
+  } catch(e) { setSubmitting(btn, false); modalError(e.message); }
 }
 
 // ────────────────────────────────────────────────────
@@ -1126,98 +1173,138 @@ async function openEditModal(type, id) {
 // CREATE submit handlers
 // ────────────────────────────────────────────────
 async function submitCreateHabit() {
-  const name=$('m-name')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
+  const name=$('m-name')?.value.trim();
+  if(!name) { modalError('Vui lòng nhập tên thói quen'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
   const isNum=selectedHabitType==='numeric';
-  await api('/api/habits','POST',{name,description:$('m-desc')?.value||'',color:selectedColor,icon:$('m-icon')?.value||'⭐',type:selectedHabitType,unit:isNum?($('m-unit')?.value||''):'',daily_goal:isNum?(parseFloat($('m-goal')?.value)||1):1});
-  closeModal(); loadHabits();
+  try {
+    await api('/api/habits','POST',{name,description:$('m-desc')?.value||'',color:selectedColor,icon:$('m-icon')?.value||'⭐',type:selectedHabitType,unit:isNum?($('m-unit')?.value||''):'',daily_goal:isNum?(parseFloat($('m-goal')?.value)||1):1});
+    closeModal(); loadHabits();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
+
 async function submitCreateTodo() {
-  const title=$('m-title')?.value.trim(); if(!title) return alert('Vui lòng nhập tiêu đề');
-  await api('/api/todos','POST',{title,description:$('m-tdesc')?.value,priority:$('m-priority')?.value,category:$('m-cat')?.value||'general',due_date:$('m-due')?.value||null});
-  closeModal(); loadTodos(); loadDashboard();
+  const title=$('m-title')?.value.trim();
+  if(!title) { modalError('Vui lòng nhập tiêu đề'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
+  try {
+    await api('/api/todos','POST',{title,description:$('m-tdesc')?.value,priority:$('m-priority')?.value,category:$('m-cat')?.value||'general',due_date:$('m-due')?.value||null});
+    closeModal(); loadTodos(); loadDashboard();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
+
 async function submitCreateProject() {
-  const name=$('m-pname')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
-  await api('/api/projects','POST',{name,description:$('m-pdesc')?.value,color:selectedColor,start_date:$('m-pstart')?.value||null,end_date:$('m-pend')?.value||null});
-  closeModal(); loadProjects(); loadDashboard();
+  const name=$('m-pname')?.value.trim();
+  if(!name) { modalError('Vui lòng nhập tên dự án'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
+  try {
+    await api('/api/projects','POST',{name,description:$('m-pdesc')?.value,color:selectedColor,start_date:$('m-pstart')?.value||null,end_date:$('m-pend')?.value||null});
+    closeModal(); loadProjects(); loadDashboard();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
+
 async function submitCreateAccount() {
-  const name=$('m-aname')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
-  await api('/api/accounts','POST',{name,type:$('m-atype')?.value,balance:parseFloat($('m-abal')?.value)||0,currency:$('m-acur')?.value,color:selectedColor});
-  closeModal(); loadFinance();
+  const name=$('m-aname')?.value.trim();
+  if(!name) { modalError('Vui lòng nhập tên tài khoản'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
+  try {
+    await api('/api/accounts','POST',{name,type:$('m-atype')?.value,balance:parseFloat($('m-abal')?.value)||0,currency:$('m-acur')?.value,color:selectedColor});
+    closeModal(); loadFinance();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
+
 async function submitCreateTxn() {
-  const amount=parseFloat($('m-tamount')?.value); if(!amount||amount<=0) return alert('Vui lòng nhập số tiền hợp lệ');
+  const amount=parseFloat($('m-tamount')?.value);
+  if(!amount||amount<=0) { modalError('Vui lòng nhập số tiền hợp lệ'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
   const accId=$('m-tacc')?.value;
-  await api('/api/transactions','POST',{amount,type:$('m-ttype')?.value,category:$('m-tcat')?.value,description:$('m-tdesc2')?.value,account_id:accId?parseInt(accId):null,date:$('m-tdate')?.value});
-  closeModal(); loadFinance(); loadDashboard();
+  try {
+    await api('/api/transactions','POST',{amount,type:$('m-ttype')?.value,category:$('m-tcat')?.value,description:$('m-tdesc2')?.value,account_id:accId?parseInt(accId):null,date:$('m-tdate')?.value});
+    closeModal(); loadFinance(); loadDashboard();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
 
 async function submitCreateGoal() {
-  const name   = $('m-gname')?.value.trim();
-  const target = parseFloat($('m-gtarget')?.value);
-  if (!name)             return alert('Vui lòng nhập tên mục tiêu');
-  if (!target || target <= 0) return alert('Vui lòng nhập số tiền hợp lệ');
-  const saved  = parseFloat($('m-gsaved')?.value) || 0;
-  const gid = await api('/api/goals','POST',{
-    name, description:$('m-gdesc')?.value||'',
-    icon:$('m-gicon')?.value||'🎯', color:selectedColor,
-    category:$('m-gcat')?.value||'other', target_amount:target,
-    currency:'VND', deadline:$('m-gdeadline')?.value||null,
-  });
-  // If they already have money saved, create an initial deposit
-  if (saved > 0 && gid?.id) {
-    await api(`/api/goals/${gid.id}/deposit`,'POST',{amount:saved,note:'Số tiền ban đầu',date:today()});
-  }
-  closeModal(); loadGoals(); loadDashboard();
+  const name=$('m-gname')?.value.trim();
+  const target=parseFloat($('m-gtarget')?.value);
+  if(!name)           { modalError('Vui lòng nhập tên mục tiêu'); return; }
+  if(!target||target<=0) { modalError('Vui lòng nhập số tiền hợp lệ'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
+  const saved=parseFloat($('m-gsaved')?.value)||0;
+  try {
+    const gid=await api('/api/goals','POST',{name,description:$('m-gdesc')?.value||'',icon:$('m-gicon')?.value||'🎯',color:selectedColor,category:$('m-gcat')?.value||'other',target_amount:target,currency:'VND',deadline:$('m-gdeadline')?.value||null});
+    if(saved>0 && gid?.id) await api(`/api/goals/${gid.id}/deposit`,'POST',{amount:saved,note:'Số tiền ban đầu',date:today()});
+    closeModal(); loadFinance();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
 
 // ────────────────────────────────────────────────
 // EDIT submit handlers
 // ────────────────────────────────────────────────
 async function submitEditHabit(id, isNum) {
-  const name=$('m-name')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
+  const name=$('m-name')?.value.trim();
+  if(!name) { modalError('Vui lòng nhập tên'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
   const body={name,description:$('m-desc')?.value||'',color:selectedColor,icon:$('m-icon')?.value||'⭐'};
   if(isNum){body.daily_goal=parseFloat($('m-goal')?.value)||1;body.unit=$('m-unit')?.value||'';}
-  await api(`/api/habits/${id}`,'PUT',body);
-  invalidateCache(id); closeModal(); loadHabits();
+  try {
+    await api(`/api/habits/${id}`,'PUT',body);
+    invalidateCache(id); closeModal(); loadHabits();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
+
 async function submitEditTodo(id) {
-  const title=$('m-title')?.value.trim(); if(!title) return alert('Vui lòng nhập tiêu đề');
-  await api(`/api/todos/${id}`,'PUT',{title,description:$('m-tdesc')?.value,priority:$('m-priority')?.value,category:$('m-cat')?.value||'general',status:$('m-status')?.value,due_date:$('m-due')?.value||null});
-  closeModal(); loadTodos(); loadDashboard();
+  const title=$('m-title')?.value.trim();
+  if(!title) { modalError('Vui lòng nhập tiêu đề'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
+  try {
+    await api(`/api/todos/${id}`,'PUT',{title,description:$('m-tdesc')?.value,priority:$('m-priority')?.value,category:$('m-cat')?.value||'general',status:$('m-status')?.value,due_date:$('m-due')?.value||null});
+    closeModal(); loadTodos(); loadDashboard();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
+
 async function submitEditProject(id) {
-  const name=$('m-pname')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
-  await api(`/api/projects/${id}`,'PUT',{name,description:$('m-pdesc')?.value,status:$('m-pstatus')?.value,color:selectedColor,start_date:$('m-pstart')?.value||null,end_date:$('m-pend')?.value||null});
-  closeModal(); loadProjects();
+  const name=$('m-pname')?.value.trim();
+  if(!name) { modalError('Vui lòng nhập tên dự án'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
+  try {
+    await api(`/api/projects/${id}`,'PUT',{name,description:$('m-pdesc')?.value,status:$('m-pstatus')?.value,color:selectedColor,start_date:$('m-pstart')?.value||null,end_date:$('m-pend')?.value||null});
+    closeModal(); loadProjects();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
+
 async function submitEditAccount(id) {
-  const name=$('m-aname')?.value.trim(); if(!name) return alert('Vui lòng nhập tên');
-  await api(`/api/accounts/${id}`,'PUT',{name,type:$('m-atype')?.value,currency:$('m-acur')?.value,color:selectedColor});
-  closeModal(); loadFinance();
+  const name=$('m-aname')?.value.trim();
+  if(!name) { modalError('Vui lòng nhập tên tài khoản'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
+  try {
+    await api(`/api/accounts/${id}`,'PUT',{name,type:$('m-atype')?.value,currency:$('m-acur')?.value,color:selectedColor});
+    closeModal(); loadFinance();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
+
 async function submitEditTxn(id) {
-  const amount=parseFloat($('m-tamount')?.value); if(!amount||amount<=0) return alert('Vui lòng nhập số tiền hợp lệ');
+  const amount=parseFloat($('m-tamount')?.value);
+  if(!amount||amount<=0) { modalError('Vui lòng nhập số tiền hợp lệ'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
   const accId=$('m-tacc')?.value;
-  // Delete + recreate keeps account balances consistent
-  await api(`/api/transactions/${id}`,'DELETE');
-  await api('/api/transactions','POST',{amount,type:$('m-ttype')?.value,category:$('m-tcat')?.value,description:$('m-tdesc2')?.value,account_id:accId?parseInt(accId):null,date:$('m-tdate')?.value});
-  closeModal(); loadFinance(); loadDashboard();
+  try {
+    await api(`/api/transactions/${id}`,'DELETE');
+    await api('/api/transactions','POST',{amount,type:$('m-ttype')?.value,category:$('m-tcat')?.value,description:$('m-tdesc2')?.value,account_id:accId?parseInt(accId):null,date:$('m-tdate')?.value});
+    closeModal(); loadFinance(); loadDashboard();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
 
 async function submitEditGoal(id) {
-  const name   = $('m-gname')?.value.trim();
-  const target = parseFloat($('m-gtarget')?.value);
-  if (!name)             return alert('Vui lòng nhập tên mục tiêu');
-  if (!target || target <= 0) return alert('Vui lòng nhập số tiền hợp lệ');
-  await api(`/api/goals/${id}`,'PUT',{
-    name, description:$('m-gdesc')?.value||'',
-    icon:$('m-gicon')?.value||'🎯', color:selectedColor,
-    category:$('m-gcat')?.value||'other', target_amount:target,
-    deadline:$('m-gdeadline')?.value||null,
-  });
-  closeModal(); loadGoals(); loadDashboard();
+  const name=$('m-gname')?.value.trim();
+  const target=parseFloat($('m-gtarget')?.value);
+  if(!name)           { modalError('Vui lòng nhập tên mục tiêu'); return; }
+  if(!target||target<=0) { modalError('Vui lòng nhập số tiền hợp lệ'); return; }
+  const btn=modalBtn(); setSubmitting(btn,true);
+  try {
+    await api(`/api/goals/${id}`,'PUT',{name,description:$('m-gdesc')?.value||'',icon:$('m-gicon')?.value||'🎯',color:selectedColor,category:$('m-gcat')?.value||'other',target_amount:target,deadline:$('m-gdeadline')?.value||null});
+    closeModal(); loadFinance();
+  } catch(e) { setSubmitting(btn,false); modalError(e.message); }
 }
 
 function closeModal() { $('overlay').classList.remove('show'); }
